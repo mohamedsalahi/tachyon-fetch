@@ -357,7 +357,15 @@ fn xdg(var: &str, fallback: &str) -> PathBuf {
     env::var_os(var).map(PathBuf::from).unwrap_or_else(|| home().join(fallback))
 }
 
-fn palettes_path(opts: &Opts) -> PathBuf { unimplemented!("palettes_path") }
+fn palettes_path(opts: &Opts) -> PathBuf {
+    if let Some(p) = &opts.palettes {
+        return p.clone();
+    }
+    if let Some(p) = env::var_os("TACHYON_FETCH_PALETTES") {
+        return PathBuf::from(p);
+    }
+    xdg("XDG_DATA_HOME", ".local/share").join("tachyon/palettes.tsv")
+}
 
 fn quotes_path(opts: &Opts) -> PathBuf { unimplemented!("quotes_path") }
 
