@@ -295,7 +295,24 @@ fn width_of(text: &str) -> usize {
     text.chars().count()
 }
 
-fn strip_ansi(text: &str) -> String { unimplemented!("strip_ansi") }
+fn strip_ansi(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut escape = false;
+    for c in text.chars() {
+        if escape {
+            if c == 'm' {
+                escape = false;
+            }
+            continue;
+        }
+        if c == '\x1b' {
+            escape = true;
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
 
 fn truncate(text: &str, max: usize) -> String { unimplemented!("truncate") }
 
