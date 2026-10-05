@@ -259,7 +259,29 @@ impl Line {
         Self { text: String::new(), width: 0 }
     }
 
-    fn push(&mut self, text: &str, color: Option<Rgb>, bold: bool) { unimplemented!("push") }
+    fn push(&mut self, text: &str, color: Option<Rgb>, bold: bool) {
+        self.width += width_of(text);
+        match color {
+            Some((r, g, b)) => {
+                if bold {
+                    self.text.push_str(&format!("\x1b[1;38;2;{};{};{}m", r, g, b));
+                } else {
+                    self.text.push_str(&format!("\x1b[38;2;{};{};{}m", r, g, b));
+                }
+                self.text.push_str(text);
+                self.text.push_str("\x1b[0m");
+            }
+            None => {
+                if bold {
+                    self.text.push_str("\x1b[1m");
+                    self.text.push_str(text);
+                    self.text.push_str("\x1b[0m");
+                } else {
+                    self.text.push_str(text);
+                }
+            }
+        }
+    }
 
     fn pad(&mut self, n: usize) {
         if n > 0 {
