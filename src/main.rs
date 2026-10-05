@@ -53,7 +53,33 @@ unsafe fn nvml_symbol<T: Copy>(library: *mut libc::c_void, name: &[u8]) -> Optio
     Some(std::mem::transmute_copy::<*mut libc::c_void, T>(&pointer))
 }
 
-fn nvml_open() -> Option<Nvml> { unimplemented!("nvml_open") }
+fn nvml_open() -> Option<Nvml> {
+    unsafe {
+        let library = libc::dlopen(
+            b"libnvidia-ml.so.1\0".as_ptr() as *const libc::c_char,
+            libc::RTLD_LAZY | libc::RTLD_LOCAL,
+        );
+        if library.is_null() {
+            return None;
+        }
+        let init: unsafe extern "C" fn() -> u32 = nvml_symbol(library, b"nvmlInit_v2\0")?;
+        if init() != 0 {
+            return None;
+        }
+        let get_handle: unsafe extern "C" fn(u32, *mut *mut libc::c_void) -> u32 =
+            nvml_symbol(library, b"nvmlDeviceGetHandleByIndex_v2\0")?;
+        let mut device: *mut libc::c_void = std::ptr::null_mut();
+        if get_handle(0, &mut device) != 0 || device.is_null() {
+            return None;
+        }
+        Some(Nvml {
+            device,
+            utilization: nvml_symbol(library, b"nvmlDeviceGetUtilizationRates\0")?,
+            memory: nvml_symbol(library, b"nvmlDeviceGetMemoryInfo\0")?,
+            temperature: nvml_symbol(library, b"nvmlDeviceGetTemperature\0")?,
+        })
+    }
+}
 
 fn nvml_stats() -> Option<(u8, String, u8)> { unimplemented!("nvml_stats") }
 
