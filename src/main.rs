@@ -81,7 +81,32 @@ fn nvml_open() -> Option<Nvml> {
     }
 }
 
-fn nvml_stats() -> Option<(u8, String, u8)> { unimplemented!("nvml_stats") }
+fn nvml_stats() -> Option<(u8, String, u8)> {
+    let nvml = nvml_open()?;
+    unsafe {
+        let mut utilization = NvmlUtilization { gpu: 0, memory: 0 };
+        let has_utilization = (nvml.utilization)(nvml.device, &mut utilization) == 0;
+        let mut memory = NvmlMemory { total: 0, free: 0, used: 0 };
+        let has_memory = (nvml.memory)(nvml.device, &mut memory) == 0 && memory.total > 0;
+        let mut temperature = 0u32;
+        let has_temperature = (nvml.temperature)(nvml.device, 0, &mut temperature) == 0;
+        if !has_utilization && !has_memory && !has_temperature {
+            return None;
+        }
+        let utilization_value = if has_utilization { utilization.gpu.min(100) as u8 } else { 0 };
+        let memory_text = if has_memory {
+            format!(
+                "{} / {} ({:.0}%)",
+                fmt_memory_bytes(memory.used),
+                fmt_memory_bytes(memory.total),
+                memory.used as f64 * 100.0 / memory.total as f64
+            )
+        } else {
+            String::new()
+        };
+        Some((utilization_value, memory_text, temperature.min(150) as u8))
+    }
+}
 
 fn fmt_memory_bytes(bytes: u64) -> String {
     const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
