@@ -314,7 +314,17 @@ fn strip_ansi(text: &str) -> String {
     out
 }
 
-fn truncate(text: &str, max: usize) -> String { unimplemented!("truncate") }
+fn truncate(text: &str, max: usize) -> String {
+    if width_of(text) <= max {
+        return text.to_string();
+    }
+    if max == 0 {
+        return String::new();
+    }
+    let mut out: String = text.chars().take(max.saturating_sub(1)).collect();
+    out.push('…');
+    out
+}
 
 fn b64(input: &[u8]) -> String { unimplemented!("b64") }
 
