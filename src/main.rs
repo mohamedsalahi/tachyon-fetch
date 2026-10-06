@@ -367,7 +367,15 @@ fn palettes_path(opts: &Opts) -> PathBuf {
     xdg("XDG_DATA_HOME", ".local/share").join("tachyon/palettes.tsv")
 }
 
-fn quotes_path(opts: &Opts) -> PathBuf { unimplemented!("quotes_path") }
+fn quotes_path(opts: &Opts) -> PathBuf {
+    if let Some(p) = &opts.quotes {
+        return p.clone();
+    }
+    if let Some(p) = env::var_os("TACHYON_FETCH_QUOTES") {
+        return PathBuf::from(p);
+    }
+    xdg("XDG_CONFIG_HOME", ".config").join("tachyon/quotes.txt")
+}
 
 fn config_path(opts: &Opts) -> PathBuf { unimplemented!("config_path") }
 
