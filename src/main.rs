@@ -448,7 +448,15 @@ fn album_pick(album: &str, rng: &mut u64) -> Option<PathBuf> {
     }
 }
 
-fn state_path(opts: &Opts) -> PathBuf { unimplemented!("state_path") }
+fn state_path(opts: &Opts) -> PathBuf {
+    if let Some(p) = &opts.state {
+        return p.clone();
+    }
+    if let Some(p) = env::var_os("TACHYON_FETCH_STATE") {
+        return PathBuf::from(p);
+    }
+    xdg("XDG_STATE_HOME", ".local/state").join("tachyon/theme")
+}
 
 fn read_state(path: &Path) -> (Option<String>, Option<String>) { unimplemented!("read_state") }
 
