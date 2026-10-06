@@ -470,7 +470,16 @@ fn read_state(path: &Path) -> (Option<String>, Option<String>) {
     }
 }
 
-fn parse_color(text: &str) -> Option<Rgb> { unimplemented!("parse_color") }
+fn parse_color(text: &str) -> Option<Rgb> {
+    let hex = text.trim().strip_prefix('#')?;
+    if hex.len() != 6 {
+        return None;
+    }
+    let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+    let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+    let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+    Some((r, g, b))
+}
 
 fn parse_palette_row(line: &str) -> Option<(String, String, Palette, String, String)> { unimplemented!("parse_palette_row") }
 
