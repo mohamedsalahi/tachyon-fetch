@@ -387,7 +387,40 @@ fn config_path(opts: &Opts) -> PathBuf {
     xdg("XDG_CONFIG_HOME", ".config").join("tachyon/fetch.conf")
 }
 
-fn load_config(path: &Path) -> Config { unimplemented!("load_config") }
+fn load_config(path: &Path) -> Config {
+    let mut config = Config::default();
+    if let Ok(text) = fs::read_to_string(path) {
+        for line in text.lines() {
+            let line = line.split('#').next().unwrap_or("").trim();
+            let Some((key, value)) = line.split_once('=') else {
+                continue;
+            };
+            let key = key.trim();
+            let value = value.trim().trim_matches('"');
+            match key {
+                "enabled" => {
+                    if value != "all" && !value.is_empty() {
+                        config.enabled = Some(
+                            value
+                                .split(',')
+                                .map(str::trim)
+                                .filter(|item| !item.is_empty())
+                                .map(str::to_string)
+                                .collect(),
+                        );
+                    }
+                }
+                "glyph" => {},
+                "album" => {},
+                "image" => {},
+                "layout" => {},
+                "motion" => {},
+                _ => {}
+            }
+        }
+    }
+    config
+}
 
 fn albums_root() -> PathBuf {
     env::var_os("TACHYON_FETCH_ALBUMS")
