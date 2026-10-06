@@ -377,7 +377,15 @@ fn quotes_path(opts: &Opts) -> PathBuf {
     xdg("XDG_CONFIG_HOME", ".config").join("tachyon/quotes.txt")
 }
 
-fn config_path(opts: &Opts) -> PathBuf { unimplemented!("config_path") }
+fn config_path(opts: &Opts) -> PathBuf {
+    if let Some(path) = &opts.config {
+        return path.clone();
+    }
+    if let Some(path) = env::var_os("TACHYON_FETCH_CONFIG") {
+        return PathBuf::from(path);
+    }
+    xdg("XDG_CONFIG_HOME", ".config").join("tachyon/fetch.conf")
+}
 
 fn load_config(path: &Path) -> Config { unimplemented!("load_config") }
 
