@@ -481,7 +481,29 @@ fn parse_color(text: &str) -> Option<Rgb> {
     Some((r, g, b))
 }
 
-fn parse_palette_row(line: &str) -> Option<(String, String, Palette, String, String)> { unimplemented!("parse_palette_row") }
+fn parse_palette_row(line: &str) -> Option<(String, String, Palette, String, String)> {
+    let fields: Vec<&str> = line.split('\t').collect();
+    if fields.len() < 12 {
+        return None;
+    }
+    let pal = Palette {
+        bg: parse_color(fields[2])?,
+        fg: parse_color(fields[3])?,
+        dim: parse_color(fields[4])?,
+        accent: parse_color(fields[5])?,
+        accent2: parse_color(fields[6])?,
+        ok: parse_color(fields[7])?,
+        warn: parse_color(fields[8])?,
+        err: parse_color(fields[9])?,
+    };
+    Some((
+        fields[0].to_string(),
+        fields[1].to_string(),
+        pal,
+        fields[10].to_string(),
+        fields[11].to_string(),
+    ))
+}
 
 fn default_mode(name: &str) -> &'static str {
     if name == "Flexoki Light" || name == "Bliss" {
