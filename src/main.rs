@@ -428,7 +428,25 @@ fn albums_root() -> PathBuf {
         .unwrap_or_else(|| xdg("XDG_DATA_HOME", ".local/share").join("tachyon/albums"))
 }
 
-fn album_pick(album: &str, rng: &mut u64) -> Option<PathBuf> { unimplemented!("album_pick") }
+fn album_pick(album: &str, rng: &mut u64) -> Option<PathBuf> {
+    let mut files: Vec<PathBuf> = fs::read_dir(albums_root().join(album))
+        .ok()?
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.extension()
+                .and_then(|value| value.to_str())
+                .map(|value| value.eq_ignore_ascii_case("png"))
+                .unwrap_or(false)
+        })
+        .collect();
+    files.sort();
+    if files.is_empty() {
+        None
+    } else {
+        Some(files[(next_rand(rng) % files.len() as u64) as usize].clone())
+    }
+}
 
 fn state_path(opts: &Opts) -> PathBuf { unimplemented!("state_path") }
 
