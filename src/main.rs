@@ -458,7 +458,17 @@ fn state_path(opts: &Opts) -> PathBuf {
     xdg("XDG_STATE_HOME", ".local/state").join("tachyon/theme")
 }
 
-fn read_state(path: &Path) -> (Option<String>, Option<String>) { unimplemented!("read_state") }
+fn read_state(path: &Path) -> (Option<String>, Option<String>) {
+    match fs::read_to_string(path) {
+        Ok(text) => {
+            let mut lines = text.lines();
+            let name = lines.next().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
+            let mode = lines.next().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
+            (name, mode)
+        }
+        Err(_) => (None, None),
+    }
+}
 
 fn parse_color(text: &str) -> Option<Rgb> { unimplemented!("parse_color") }
 
