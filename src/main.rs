@@ -589,7 +589,25 @@ fn next_rand(state: &mut u64) -> u64 {
     x
 }
 
-fn parse_os_release(text: &str) -> String { unimplemented!("parse_os_release") }
+fn parse_os_release(text: &str) -> String {
+    let mut name = None;
+    for line in text.lines() {
+        if let Some(value) = line.strip_prefix("PRETTY_NAME=") {
+            let value = value.trim().trim_matches('"');
+            if !value.is_empty() {
+                name = Some(value.to_string());
+            }
+        } else if name.is_none() {
+            if let Some(value) = line.strip_prefix("NAME=") {
+                let value = value.trim().trim_matches('"');
+                if !value.is_empty() {
+                    name = Some(value.to_string());
+                }
+            }
+        }
+    }
+    name.unwrap_or_else(|| "Linux".to_string())
+}
 
 fn collapse_spaces(text: &str) -> String { unimplemented!("collapse_spaces") }
 
