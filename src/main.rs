@@ -648,7 +648,21 @@ fn parse_cpuinfo(text: &str) -> (String, usize) {
     (model, cores)
 }
 
-fn parse_meminfo(text: &str) -> Option<(u64, u64)> { unimplemented!("parse_meminfo") }
+fn parse_meminfo(text: &str) -> Option<(u64, u64)> {
+    let mut total = None;
+    let mut available = None;
+    for line in text.lines() {
+        if let Some(value) = line.strip_prefix("MemTotal:") {
+            total = value.split_whitespace().next().and_then(|v| v.parse::<u64>().ok());
+        } else if let Some(value) = line.strip_prefix("MemAvailable:") {
+            available = value.split_whitespace().next().and_then(|v| v.parse::<u64>().ok());
+        }
+    }
+    match (total, available) {
+        (Some(total), Some(available)) if total > 0 => Some((total, available)),
+        _ => None,
+    }
+}
 
 fn meminfo_value(text: &str, key: &str) -> Option<u64> { unimplemented!("meminfo_value") }
 
