@@ -626,7 +626,27 @@ fn collapse_spaces(text: &str) -> String {
     out.trim().to_string()
 }
 
-fn parse_cpuinfo(text: &str) -> (String, usize) { unimplemented!("parse_cpuinfo") }
+fn parse_cpuinfo(text: &str) -> (String, usize) {
+    let mut model = String::new();
+    let mut cores = 0usize;
+    for line in text.lines() {
+        if line.starts_with("processor") {
+            cores += 1;
+        }
+        if model.is_empty() {
+            if let Some((key, value)) = line.split_once(':') {
+                if key.trim() == "model name" {
+                    model = collapse_spaces(value)
+                        .replace("(R)", "")
+                        .replace("(TM)", "")
+                        .replace("CPU ", "");
+                    model = collapse_spaces(&model);
+                }
+            }
+        }
+    }
+    (model, cores)
+}
 
 fn parse_meminfo(text: &str) -> Option<(u64, u64)> { unimplemented!("parse_meminfo") }
 
