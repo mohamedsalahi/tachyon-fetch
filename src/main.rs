@@ -513,7 +513,55 @@ fn default_mode(name: &str) -> &'static str {
     }
 }
 
-fn load_theme(opts: &Opts) -> Theme { unimplemented!("load_theme") }
+fn load_theme(opts: &Opts) -> Theme {
+    let (state_name, state_mode) = read_state(&state_path(opts));
+    let mut state_name = state_name;
+    let mut state_mode = state_mode;
+    if state_name.is_none() {
+        let omarchy = xdg("XDG_STATE_HOME", ".local/state").join("omarchy/current/theme/theme.name");
+        if let Ok(text) = fs::read_to_string(omarchy) {
+            let name = text.trim();
+            if !name.is_empty() {
+                state_mode = Some(default_mode(name).to_string());
+                state_name = Some(name.to_string());
+            }
+        }
+    }
+    let wanted = opts.theme.clone().or(state_name).unwrap_or_else(|| "Solitude".to_string());
+    let mode = opts.variant.clone().or(state_mode).unwrap_or_else(|| "dark".to_string());
+
+    let rows: Vec<_> = fs::read_to_string(palettes_path(opts))
+        .ok()
+        .map(|text| text.lines().filter_map(parse_palette_row).collect())
+        .unwrap_or_default();
+
+    let pick = |variant: &str| {
+        rows.iter()
+            .find(|(name, v, _, _, _)| name == &wanted && v == variant)
+            .cloned()
+    };
+    let chosen = pick(&mode)
+        .or_else(|| pick("dark"))
+        .or_else(|| pick("light"))
+        .or_else(|| rows.iter().find(|(name, _, _, _, _)| name == &wanted).cloned());
+
+    match chosen {
+        Some((name, variant, pal, layout, motion)) => Theme {
+            name,
+            mode: variant,
+            pal,
+            layout,
+            motion,
+        },
+        None => Theme {
+            name: wanted,
+            mode,
+            pal: FALLBACK_PALETTE,
+            layout: "hud".to_string(),
+            motion: "reveal".to_string(),
+        },
+    }
+}
 
 fn load_quotes(path: &Path) -> Vec<String> { unimplemented!("load_quotes") }
 
