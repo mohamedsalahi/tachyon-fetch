@@ -672,7 +672,23 @@ fn meminfo_value(text: &str, key: &str) -> Option<u64> {
     })
 }
 
-fn hwmon_temp(kinds: &[&str]) -> Option<u8> { unimplemented!("hwmon_temp") }
+fn hwmon_temp(kinds: &[&str]) -> Option<u8> {
+    for entry in fs::read_dir("/sys/class/hwmon").ok()?.flatten() {
+        let name = match fs::read_to_string(entry.path().join("name")) {
+            Ok(name) => name.trim().to_string(),
+            Err(_) => continue,
+        };
+        if !kinds.iter().any(|kind| name == *kind) {
+            continue;
+        }
+        if let Ok(raw) = fs::read_to_string(entry.path().join("temp1_input")) {
+            if let Ok(value) = raw.trim().parse::<f64>() {
+                return Some((value / 1000.0).round().clamp(0.0, 150.0) as u8);
+            }
+        }
+    }
+    None
+}
 
 fn link_info() -> Option<String> { unimplemented!("link_info") }
 
