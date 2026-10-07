@@ -609,7 +609,22 @@ fn parse_os_release(text: &str) -> String {
     name.unwrap_or_else(|| "Linux".to_string())
 }
 
-fn collapse_spaces(text: &str) -> String { unimplemented!("collapse_spaces") }
+fn collapse_spaces(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut space = false;
+    for c in text.chars() {
+        if c.is_whitespace() {
+            if !space {
+                out.push(' ');
+                space = true;
+            }
+        } else {
+            out.push(c);
+            space = false;
+        }
+    }
+    out.trim().to_string()
+}
 
 fn parse_cpuinfo(text: &str) -> (String, usize) { unimplemented!("parse_cpuinfo") }
 
