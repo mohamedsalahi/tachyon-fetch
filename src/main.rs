@@ -664,7 +664,13 @@ fn parse_meminfo(text: &str) -> Option<(u64, u64)> {
     }
 }
 
-fn meminfo_value(text: &str, key: &str) -> Option<u64> { unimplemented!("meminfo_value") }
+fn meminfo_value(text: &str, key: &str) -> Option<u64> {
+    text.lines().find_map(|line| {
+        line.strip_prefix(key)
+            .and_then(|value| value.split_whitespace().next())
+            .and_then(|value| value.parse::<u64>().ok())
+    })
+}
 
 fn hwmon_temp(kinds: &[&str]) -> Option<u8> { unimplemented!("hwmon_temp") }
 
