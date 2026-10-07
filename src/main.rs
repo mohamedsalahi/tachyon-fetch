@@ -563,7 +563,22 @@ fn load_theme(opts: &Opts) -> Theme {
     }
 }
 
-fn load_quotes(path: &Path) -> Vec<String> { unimplemented!("load_quotes") }
+fn load_quotes(path: &Path) -> Vec<String> {
+    let mut quotes: Vec<String> = fs::read_to_string(path)
+        .ok()
+        .map(|text| {
+            text.lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+    if quotes.is_empty() {
+        quotes = FALLBACK_QUOTES.iter().map(|s| s.to_string()).collect();
+    }
+    quotes
+}
 
 fn next_rand(state: &mut u64) -> u64 {
     let mut x = *state;
