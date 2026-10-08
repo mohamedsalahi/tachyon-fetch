@@ -690,7 +690,26 @@ fn hwmon_temp(kinds: &[&str]) -> Option<u8> {
     None
 }
 
-fn link_info() -> Option<String> { unimplemented!("link_info") }
+fn link_info() -> Option<String> {
+    for entry in fs::read_dir("/sys/class/net").ok()?.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name == "lo" {
+            continue;
+        }
+        let state = read_trim(entry.path().join("operstate").to_str()?).unwrap_or_default();
+        if state != "up" {
+            continue;
+        }
+        let speed = read_trim(entry.path().join("speed").to_str()?)
+            .and_then(|value| value.parse::<i64>().ok())
+            .filter(|value| *value > 0);
+        return Some(match speed {
+            Some(speed) => format!("{} · {} Mb/s", name, speed),
+            None => format!("{} · up", name),
+        });
+    }
+    None
+}
 
 fn process_count() -> Option<String> { unimplemented!("process_count") }
 
