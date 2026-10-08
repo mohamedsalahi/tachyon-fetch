@@ -711,7 +711,24 @@ fn link_info() -> Option<String> {
     None
 }
 
-fn process_count() -> Option<String> { unimplemented!("process_count") }
+fn process_count() -> Option<String> {
+    let count = fs::read_dir("/proc")
+        .ok()?
+        .flatten()
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .chars()
+                .all(|c| c.is_ascii_digit())
+        })
+        .count();
+    if count > 2 {
+        Some(count.to_string())
+    } else {
+        None
+    }
+}
 
 fn parse_fib_trie(text: &str) -> Option<String> { unimplemented!("parse_fib_trie") }
 
