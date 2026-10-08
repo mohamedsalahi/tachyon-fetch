@@ -747,7 +747,17 @@ fn parse_fib_trie(text: &str) -> Option<String> {
     None
 }
 
-fn is_ipv4(text: &str) -> bool { unimplemented!("is_ipv4") }
+fn is_ipv4(text: &str) -> bool {
+    let parts: Vec<&str> = text.split('.').collect();
+    if parts.len() != 4 {
+        return false;
+    }
+    parts.iter().all(|part| {
+        !part.is_empty()
+            && part.chars().all(|c| c.is_ascii_digit())
+            && part.parse::<u16>().map(|v| v <= 255).unwrap_or(false)
+    })
+}
 
 fn fmt_uptime(seconds: u64) -> String { unimplemented!("fmt_uptime") }
 
