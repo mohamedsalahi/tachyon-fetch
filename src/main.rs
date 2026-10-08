@@ -772,7 +772,16 @@ fn fmt_uptime(seconds: u64) -> String {
     }
 }
 
-fn fmt_size(bytes: u64) -> String { unimplemented!("fmt_size") }
+fn fmt_size(bytes: u64) -> String {
+    const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
+    const TIB: f64 = GIB * 1024.0;
+    let value = bytes as f64;
+    if value >= TIB {
+        format!("{:.1} TiB", value / TIB)
+    } else {
+        format!("{:.0} GiB", value / GIB)
+    }
+}
 
 fn read_text(path: &str) -> Option<String> {
     fs::read_to_string(path).ok()
