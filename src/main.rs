@@ -730,7 +730,22 @@ fn process_count() -> Option<String> {
     }
 }
 
-fn parse_fib_trie(text: &str) -> Option<String> { unimplemented!("parse_fib_trie") }
+fn parse_fib_trie(text: &str) -> Option<String> {
+    let mut candidate: Option<String> = None;
+    for line in text.lines() {
+        if let Some(pos) = line.find("|-- ") {
+            let token = line[pos + 4..].trim();
+            if is_ipv4(token) && !token.starts_with("127.") && !token.starts_with("0.") {
+                candidate = Some(token.to_string());
+            }
+        } else if line.contains("/32 host LOCAL") {
+            if let Some(found) = candidate.take() {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
 
 fn is_ipv4(text: &str) -> bool { unimplemented!("is_ipv4") }
 
