@@ -759,7 +759,18 @@ fn is_ipv4(text: &str) -> bool {
     })
 }
 
-fn fmt_uptime(seconds: u64) -> String { unimplemented!("fmt_uptime") }
+fn fmt_uptime(seconds: u64) -> String {
+    let days = seconds / 86_400;
+    let hours = (seconds % 86_400) / 3_600;
+    let minutes = (seconds % 3_600) / 60;
+    if days > 0 {
+        format!("{}d {:02}h {:02}m", days, hours, minutes)
+    } else if hours > 0 {
+        format!("{}h {:02}m", hours, minutes)
+    } else {
+        format!("{}m", minutes)
+    }
+}
 
 fn fmt_size(bytes: u64) -> String { unimplemented!("fmt_size") }
 
