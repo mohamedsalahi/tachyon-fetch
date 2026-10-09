@@ -791,7 +791,20 @@ fn read_trim(path: &str) -> Option<String> {
     read_text(path).map(|text| text.trim().to_string()).filter(|text| !text.is_empty())
 }
 
-fn term_size() -> (usize, usize, usize, usize) { unimplemented!("term_size") }
+fn term_size() -> (usize, usize, usize, usize) {
+    let mut size: libc::winsize = unsafe { std::mem::zeroed() };
+    let result = unsafe { libc::ioctl(libc::STDOUT_FILENO, libc::TIOCGWINSZ, &mut size) };
+    if result == 0 && size.ws_col > 0 {
+        (
+            size.ws_col as usize,
+            size.ws_row as usize,
+            size.ws_xpixel as usize,
+            size.ws_ypixel as usize,
+        )
+    } else {
+        (100, 30, 0, 0)
+    }
+}
 
 fn disk_usage(path: &str) -> Option<(u64, u64)> { unimplemented!("disk_usage") }
 
