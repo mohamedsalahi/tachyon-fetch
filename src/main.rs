@@ -1106,7 +1106,20 @@ fn demo_data() -> FetchData {
     }
 }
 
-fn png_size(path: &Path) -> Option<(u32, u32)> { unimplemented!("png_size") }
+fn png_size(path: &Path) -> Option<(u32, u32)> {
+    let mut file = fs::File::open(path).ok()?;
+    let mut header = [0u8; 24];
+    file.read_exact(&mut header).ok()?;
+    if &header[0..8] != b"\x89PNG\r\n\x1a\n" {
+        return None;
+    }
+    let width = u32::from_be_bytes([header[16], header[17], header[18], header[19]]);
+    let height = u32::from_be_bytes([header[20], header[21], header[22], header[23]]);
+    if width == 0 || height == 0 {
+        return None;
+    }
+    Some((width, height))
+}
 
 fn in_kitty() -> bool { unimplemented!("in_kitty") }
 
