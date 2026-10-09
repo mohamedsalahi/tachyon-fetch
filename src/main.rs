@@ -1066,7 +1066,45 @@ fn collect_data() -> FetchData {
     }
 }
 
-fn demo_data() -> FetchData { unimplemented!("demo_data") }
+fn demo_data() -> FetchData {
+    FetchData {
+        user: "pilot".to_string(),
+        hostname: "tuf15".to_string(),
+        host: "ASUS TUF Gaming A15".to_string(),
+        os: "NixOS 26.11 (x86_64)".to_string(),
+        kernel: "6.16.0".to_string(),
+        uptime: "2h 41m".to_string(),
+        shell: "fish 4.0.1".to_string(),
+        terminal: "kitty".to_string(),
+        compositor: "Umbriel".to_string(),
+        session: "wayland".to_string(),
+        cores: 16,
+        load: Some("0.42 0.51 0.47".to_string()),
+        cpu: "AMD Ryzen 7 (16)".to_string(),
+        gpu: Some("NVIDIA GeForce RTX 4060 Laptop GPU".to_string()),
+        gpu_util: Some(37),
+        gpu_vram: Some("3.2 / 8.0 GiB (40%)".to_string()),
+        memory: "4.6 / 15.0 GiB (31%)".to_string(),
+        memory_pct: 31,
+        swap: Some("0.0 / 8.0 GiB (0%)".to_string()),
+        swap_pct: 0,
+        disk: Some("214 GiB / 1.0 TiB (21%)".to_string()),
+        disk_pct: 21,
+        media: Some("612 GiB / 1.4 TiB (43%)".to_string()),
+        media_pct: 43,
+        code: Some("18 GiB / 256 GiB (7%)".to_string()),
+        code_pct: 7,
+        ip: Some("10.0.0.42".to_string()),
+        link: Some("wlan0 · 866 Mb/s".to_string()),
+        processes: Some("412".to_string()),
+        battery: Some("87% [Charging]".to_string()),
+        battery_pct: 87,
+        charging: true,
+        battery_health: Some(96),
+        cpu_temp: Some(58),
+        gpu_temp: Some(52),
+    }
+}
 
 fn png_size(path: &Path) -> Option<(u32, u32)> { unimplemented!("png_size") }
 
