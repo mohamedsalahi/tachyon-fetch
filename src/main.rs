@@ -879,7 +879,192 @@ fn battery_info() -> Option<(u8, String, bool, Option<u8>)> {
     None
 }
 
-fn collect_data() -> FetchData { unimplemented!("collect_data") }
+fn collect_data() -> FetchData {
+    let hostname = read_trim("/proc/sys/kernel/hostname").unwrap_or_else(|| "localhost".to_string());
+    let user = env::var("USER")
+        .or_else(|_| env::var("LOGNAME"))
+        .unwrap_or_else(|_| "user".to_string());
+
+    let os = read_text("/etc/os-release").map(|text| parse_os_release(&text)).unwrap_or_else(|| "Linux".to_string());
+    let kernel = read_trim("/proc/sys/kernel/osrelease").unwrap_or_else(|| "unknown".to_string());
+    let uptime = read_text("/proc/uptime")
+        .and_then(|text| text.split_whitespace().next().and_then(|v| v.parse::<f64>().ok()))
+        .map(|seconds| fmt_uptime(seconds as u64))
+        .unwrap_or_else(|| "unknown".to_string());
+
+    let host = read_trim("/sys/class/dmi/id/product_name").unwrap_or_else(|| hostname.clone());
+
+    let shell = env::var("SHELL")
+        .ok()
+        .and_then(|value| Path::new(&value).file_name().map(|name| name.to_string_lossy().to_string()))
+        .unwrap_or_else(|| "sh".to_string());
+
+    let terminal = if env::var_os("KITTY_WINDOW_ID").is_some() {
+        "kitty".to_string()
+    } else {
+        env::var("TERM_PROGRAM")
+            .ok()
+            .filter(|value| !value.is_empty())
+            .or_else(|| env::var("TERM").ok().filter(|value| !value.is_empty()))
+            .unwrap_or_else(|| "tty".to_string())
+    };
+
+    let compositor = env::var("XDG_CURRENT_DESKTOP")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            if env::var_os("WAYLAND_DISPLAY").is_some() {
+                Some("Wayland".to_string())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| "tty".to_string());
+
+    let session = env::var("XDG_SESSION_TYPE")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "tty".to_string());
+
+    let load = read_text("/proc/loadavg").and_then(|text| {
+        let values: Vec<&str> = text.split_whitespace().take(3).collect();
+        if values.len() == 3 {
+            Some(values.join(" "))
+        } else {
+            None
+        }
+    });
+
+    let (cpu, cores) = read_text("/proc/cpuinfo")
+        .map(|text| parse_cpuinfo(&text))
+        .unwrap_or_else(|| ("unknown".to_string(), 0));
+    let cpu = if cores > 0 {
+        format!("{} ({})", cpu, cores)
+    } else {
+        cpu
+    };
+
+    let gpu = gpu_name();
+
+    let meminfo = read_text("/proc/meminfo");
+    let (memory, memory_pct) = match meminfo.as_deref().and_then(parse_meminfo) {
+        Some((total, available)) => {
+            let used = total.saturating_sub(available);
+            let total_gib = total as f64 / 1024.0 / 1024.0;
+            let used_gib = used as f64 / 1024.0 / 1024.0;
+            let percent = if total > 0 { (used * 100 / total) as u8 } else { 0 };
+            (format!("{:.1} / {:.1} GiB ({}%)", used_gib, total_gib, percent), percent)
+        }
+        None => ("unknown".to_string(), 0),
+    };
+
+    let (swap, swap_pct) = match meminfo.as_deref() {
+        Some(text) => match (meminfo_value(text, "SwapTotal:"), meminfo_value(text, "SwapFree:")) {
+            (Some(total), Some(free)) if total > 0 => {
+                let used = total.saturating_sub(free);
+                let percent = (used * 100 / total) as u8;
+                (
+                    Some(format!(
+                        "{:.1} / {:.1} GiB ({}%)",
+                        used as f64 / 1024.0 / 1024.0,
+                        total as f64 / 1024.0 / 1024.0,
+                        percent
+                    )),
+                    percent,
+                )
+            }
+            _ => (None, 0),
+        },
+        None => (None, 0),
+    };
+
+    let mount = |path: &str| -> Option<(String, u8)> {
+        if !Path::new(path).is_dir() {
+            return None;
+        }
+        let (used, total) = disk_usage(path)?;
+        if total == 0 {
+            return None;
+        }
+        let percent = (used * 100 / total) as u8;
+        Some((format!("{} / {} ({}%)", fmt_size(used), fmt_size(total), percent), percent))
+    };
+
+    let (disk, disk_pct) = match mount("/") {
+        Some((text, percent)) => (Some(text), percent),
+        None => (None, 0),
+    };
+    let (media, media_pct) = match mount("/media") {
+        Some((text, percent)) => (Some(text), percent),
+        None => (None, 0),
+    };
+    let (code, code_pct) = match mount("/code") {
+        Some((text, percent)) => (Some(text), percent),
+        None => (None, 0),
+    };
+
+    let ip = read_text("/proc/net/fib_trie").and_then(|text| parse_fib_trie(&text));
+    let link = link_info();
+    let processes = process_count();
+
+    let (battery, battery_pct, charging, battery_health) = match battery_info() {
+        Some((capacity, status, charging, health)) => {
+            (Some(format!("{}% [{}]", capacity, status)), capacity, charging, health)
+        }
+        None => (None, 0, false, None),
+    };
+
+    let cpu_temp = hwmon_temp(&["k10temp", "zenpower", "coretemp"]);
+    let nvml = nvml_stats();
+    let gpu_util = nvml.as_ref().map(|(utilization, _, _)| *utilization);
+    let gpu_vram = nvml
+        .as_ref()
+        .map(|(_, memory, _)| memory.clone())
+        .filter(|memory| !memory.is_empty());
+    let gpu_temp = nvml
+        .as_ref()
+        .map(|(_, _, temperature)| *temperature)
+        .filter(|temperature| *temperature > 0)
+        .or_else(|| hwmon_temp(&["nvidia"]));
+
+    FetchData {
+        user,
+        hostname,
+        host,
+        os,
+        kernel,
+        uptime,
+        shell,
+        terminal,
+        compositor,
+        session,
+        cores,
+        load,
+        cpu,
+        gpu,
+        gpu_util,
+        gpu_vram,
+        memory,
+        memory_pct,
+        swap,
+        swap_pct,
+        disk,
+        disk_pct,
+        media,
+        media_pct,
+        code,
+        code_pct,
+        ip,
+        link,
+        processes,
+        battery,
+        battery_pct,
+        charging,
+        battery_health,
+        cpu_temp,
+        gpu_temp,
+    }
+}
 
 fn demo_data() -> FetchData { unimplemented!("demo_data") }
 
