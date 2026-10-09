@@ -806,7 +806,18 @@ fn term_size() -> (usize, usize, usize, usize) {
     }
 }
 
-fn disk_usage(path: &str) -> Option<(u64, u64)> { unimplemented!("disk_usage") }
+fn disk_usage(path: &str) -> Option<(u64, u64)> {
+    let mut stats: libc::statvfs = unsafe { std::mem::zeroed() };
+    let c_path = CString::new(path).ok()?;
+    let result = unsafe { libc::statvfs(c_path.as_ptr(), &mut stats) };
+    if result != 0 || stats.f_frsize == 0 || stats.f_blocks == 0 {
+        return None;
+    }
+    let total = stats.f_blocks.saturating_mul(stats.f_frsize);
+    let available = stats.f_bavail.saturating_mul(stats.f_frsize);
+    let used = total.saturating_sub(available);
+    Some((used, total))
+}
 
 fn gpu_name() -> Option<String> { unimplemented!("gpu_name") }
 
