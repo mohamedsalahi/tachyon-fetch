@@ -1151,7 +1151,30 @@ fn select_logo(opts: &Opts, config: &Config, rng: &mut u64) -> Option<PathBuf> {
     png_size(&path).map(|_| path)
 }
 
-fn section(glyph: char, title: &str, rows: &[Row], width: usize, pal: &Palette) -> Vec<Line> { unimplemented!("section") }
+fn section(glyph: char, title: &str, rows: &[Row], width: usize, pal: &Palette) -> Vec<Line> {
+    if rows.is_empty() {
+        return Vec::new();
+    }
+    let keyw = rows.iter().map(|row| width_of(row.key)).max().unwrap_or(5);
+    let prefix = format!("{} {} ", glyph, title);
+    let prefix_width = width_of(&prefix);
+    let mut head = Line::new();
+    head.push(&prefix, Some(pal.accent2), true);
+    if width > prefix_width {
+        head.push(&"─".repeat(width - prefix_width), Some(pal.dim), false);
+    }
+    let mut lines = vec![head];
+    for row in rows {
+        let mut line = Line::new();
+        let key_padded = format!("{:<keyw$}", row.key, keyw = keyw);
+        line.push(&key_padded, Some(pal.dim), false);
+        line.push("  ", None, false);
+        let available = width.saturating_sub(keyw + 2);
+        line.push(&truncate(&row.value, available), row.tone.or(Some(pal.fg)), false);
+        lines.push(line);
+    }
+    lines
+}
 
 fn hcat(left: &[Line], right: &[Line], left_width: usize, gap: usize) -> Vec<Line> { unimplemented!("hcat") }
 
