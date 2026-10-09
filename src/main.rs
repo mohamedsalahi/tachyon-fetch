@@ -1130,7 +1130,26 @@ fn in_kitty() -> bool {
         || env::var("TERM_PROGRAM").map(|value| value == "kitty").unwrap_or(false)
 }
 
-fn select_logo(opts: &Opts, config: &Config, rng: &mut u64) -> Option<PathBuf> { unimplemented!("select_logo") }
+fn select_logo(opts: &Opts, config: &Config, rng: &mut u64) -> Option<PathBuf> {
+    let explicit = opts
+        .logo
+        .clone()
+        .or_else(|| config.image.clone())
+        .or_else(|| env::var_os("TACHYON_FETCH_LOGO").map(PathBuf::from));
+    if let Some(path) = explicit {
+        if png_size(&path).is_some() {
+            return Some(path);
+        }
+    }
+    let album = opts.album.clone().or_else(|| config.album.clone());
+    if let Some(album) = album {
+        if let Some(path) = album_pick(&album, rng) {
+            return Some(path);
+        }
+    }
+    let path = xdg("XDG_DATA_HOME", ".local/share").join("tachyon/logo.png");
+    png_size(&path).map(|_| path)
+}
 
 fn section(glyph: char, title: &str, rows: &[Row], width: usize, pal: &Palette) -> Vec<Line> { unimplemented!("section") }
 
