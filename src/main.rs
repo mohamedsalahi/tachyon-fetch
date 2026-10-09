@@ -837,7 +837,47 @@ fn gpu_name() -> Option<String> {
     None
 }
 
-fn battery_info() -> Option<(u8, String, bool, Option<u8>)> { unimplemented!("battery_info") }
+fn battery_info() -> Option<(u8, String, bool, Option<u8>)> {
+    let entries = fs::read_dir("/sys/class/power_supply").ok()?;
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if !name.starts_with("BAT") {
+            continue;
+        }
+        let capacity = fs::read_to_string(entry.path().join("capacity"))
+            .ok()
+            .and_then(|value| value.trim().parse::<u8>().ok())?;
+        let status = fs::read_to_string(entry.path().join("status"))
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| "Unknown".to_string());
+        let charging = status == "AC" || status == "Full";
+        let health = ["energy_full", "charge_full"]
+            .iter()
+            .find_map(|full| {
+                let design = if *full == "energy_full" {
+                    "energy_full_design"
+                } else {
+                    "charge_full_design"
+                };
+                let full_value = fs::read_to_string(entry.path().join(full))
+                    .ok()
+                    .and_then(|value| value.trim().parse::<u64>().ok())?;
+                let design_value = fs::read_to_string(entry.path().join(design))
+                    .ok()
+                    .and_then(|value| value.trim().parse::<u64>().ok())?;
+                if design_value > 0 {
+                    Some(((full_value * 100) / design_value) as u8)
+                } else {
+                    None
+                }
+            });
+        return Some((capacity, status, charging, health));
+    }
+    None
+}
 
 fn collect_data() -> FetchData { unimplemented!("collect_data") }
 
