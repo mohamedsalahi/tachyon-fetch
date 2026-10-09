@@ -1121,7 +1121,14 @@ fn png_size(path: &Path) -> Option<(u32, u32)> {
     Some((width, height))
 }
 
-fn in_kitty() -> bool { unimplemented!("in_kitty") }
+fn in_kitty() -> bool {
+    if env::var_os("TMUX").is_some() {
+        return false;
+    }
+    env::var_os("KITTY_WINDOW_ID").is_some()
+        || env::var("TERM").map(|value| value.contains("kitty")).unwrap_or(false)
+        || env::var("TERM_PROGRAM").map(|value| value == "kitty").unwrap_or(false)
+}
 
 fn select_logo(opts: &Opts, config: &Config, rng: &mut u64) -> Option<PathBuf> { unimplemented!("select_logo") }
 
