@@ -819,7 +819,23 @@ fn disk_usage(path: &str) -> Option<(u64, u64)> {
     Some((used, total))
 }
 
-fn gpu_name() -> Option<String> { unimplemented!("gpu_name") }
+fn gpu_name() -> Option<String> {
+    let entries = fs::read_dir("/proc/driver/nvidia/gpus").ok()?;
+    for entry in entries.flatten() {
+        let info = entry.path().join("information");
+        if let Ok(text) = fs::read_to_string(info) {
+            for line in text.lines() {
+                if let Some(value) = line.strip_prefix("Model:") {
+                    let value = value.trim();
+                    if !value.is_empty() {
+                        return Some(value.to_string());
+                    }
+                }
+            }
+        }
+    }
+    None
+}
 
 fn battery_info() -> Option<(u8, String, bool, Option<u8>)> { unimplemented!("battery_info") }
 
