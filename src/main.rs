@@ -1449,7 +1449,22 @@ struct RawTty {
 }
 
 impl RawTty {
-    fn enable(file: &fs::File) -> Option<Self> { unimplemented!("enable") }
+    fn enable(file: &fs::File) -> Option<Self> {
+        let fd = file.as_raw_fd();
+        unsafe {
+            let mut current: libc::termios = std::mem::zeroed();
+            if libc::tcgetattr(fd, &mut current) != 0 {
+                return None;
+            }
+            let original = current;
+            let mut raw = current;
+            libc::cfmakeraw(&mut raw);
+            if libc::tcsetattr(fd, libc::TCSANOW, &raw) != 0 {
+                return None;
+            }
+            Some(RawTty { fd, original })
+        }
+    }
 }
 
 impl Drop for RawTty {
