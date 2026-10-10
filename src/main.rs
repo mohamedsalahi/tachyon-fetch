@@ -1176,7 +1176,29 @@ fn section(glyph: char, title: &str, rows: &[Row], width: usize, pal: &Palette) 
     lines
 }
 
-fn hcat(left: &[Line], right: &[Line], left_width: usize, gap: usize) -> Vec<Line> { unimplemented!("hcat") }
+fn hcat(left: &[Line], right: &[Line], left_width: usize, gap: usize) -> Vec<Line> {
+    let count = left.len().max(right.len());
+    let mut out = Vec::with_capacity(count);
+    for i in 0..count {
+        let mut text = String::new();
+        let mut width = 0;
+        if let Some(line) = left.get(i) {
+            text.push_str(&line.text);
+            width = line.width;
+        }
+        if left_width > width {
+            text.push_str(&" ".repeat(left_width - width));
+        }
+        width = left_width + gap;
+        text.push_str(&" ".repeat(gap));
+        if let Some(line) = right.get(i) {
+            text.push_str(&line.text);
+            width += line.width;
+        }
+        out.push(Line { text, width });
+    }
+    out
+}
 
 fn build_sections(data: &FetchData, pal: &Palette, enabled: Option<&[String]>) -> Sections { unimplemented!("build_sections") }
 
