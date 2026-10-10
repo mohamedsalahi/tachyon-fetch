@@ -1200,7 +1200,41 @@ fn hcat(left: &[Line], right: &[Line], left_width: usize, gap: usize) -> Vec<Lin
     out
 }
 
-fn build_sections(data: &FetchData, pal: &Palette, enabled: Option<&[String]>) -> Sections { unimplemented!("build_sections") }
+fn build_sections(data: &FetchData, pal: &Palette, enabled: Option<&[String]>) -> Sections {
+    let on = |id: &str| enabled.map_or(true, |list| list.iter().any(|item| item == id));
+    let mut sections = Sections::default();
+
+    if on("os") {}
+    if on("host") {}
+    if on("kernel") {}
+    if on("uptime") {}
+    if on("session") {}
+    if on("shell") {}
+    if on("terminal") {}
+    if on("compositor") {}
+    if on("load") {}
+
+    if on("cpu") {}
+    if on("gpu") {}
+    if on("gpu_util") {}
+    if on("gpu_vram") {}
+    if on("memory") {}
+    if on("swap") {}
+    let disk_tone = |pct: u8| if pct >= 90 { Some(pal.warn) } else { None };
+    if on("disk_root") {}
+    if on("disk_media") {}
+    if on("disk_code") {}
+    if on("ip") {}
+    if on("link") {}
+    if on("processes") {}
+
+    if on("battery") {}
+    if on("battery_health") {}
+    if on("cpu_temp") {}
+    if on("gpu_temp") {}
+
+    sections
+}
 
 fn render(
     theme: &Theme,
