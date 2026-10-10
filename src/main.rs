@@ -1382,7 +1382,24 @@ fn help() {
     );
 }
 
-fn list_themes(opts: &Opts) { unimplemented!("list_themes") }
+fn list_themes(opts: &Opts) {
+    if let Ok(text) = fs::read_to_string(palettes_path(opts)) {
+        let mut seen: Vec<String> = Vec::new();
+        for line in text.lines() {
+            if let Some((name, _, _, _, _)) = parse_palette_row(line) {
+                if !seen.contains(&name) {
+                    seen.push(name);
+                }
+            }
+        }
+        seen.sort();
+        for name in seen {
+            println!("{}", name);
+        }
+    } else {
+        println!("Solitude");
+    }
+}
 
 const MODULES: &[(&str, &str)] = &[
     ("os", "OS"),
