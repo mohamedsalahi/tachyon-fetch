@@ -1315,7 +1315,42 @@ fn render(
     lines
 }
 
-fn parse_args() -> Opts { unimplemented!("parse_args") }
+fn parse_args() -> Opts {
+    let mut opts = Opts::default();
+    let mut args = env::args().skip(1);
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--demo" => opts.demo = true,
+            "--plain" => opts.plain = true,
+            "--static" => opts.no_motion = true,
+            "--no-logo" => opts.no_logo = true,
+            "-h" | "--help" => opts.help = true,
+            "-V" | "--version" => opts.version = true,
+            "--list-themes" => opts.list_themes = true,
+            "--tui" => opts.tui = true,
+            "--layout" => opts.layout = args.next(),
+            "--glyph" => opts.glyph = args.next(),
+            "--album" => opts.album = args.next(),
+            "--theme" => opts.theme = args.next(),
+            "--variant" => opts.variant = args.next(),
+            "--seed" => opts.seed = args.next().and_then(|value| value.parse().ok()),
+            "--logo" => opts.logo = args.next().map(PathBuf::from),
+            "--palettes" => opts.palettes = args.next().map(PathBuf::from),
+            "--quotes" => opts.quotes = args.next().map(PathBuf::from),
+            "--config" => opts.config = args.next().map(PathBuf::from),
+            "--state" => opts.state = args.next().map(PathBuf::from),
+            "--convert" => {
+                opts.convert_source = args.next().map(PathBuf::from);
+                opts.convert_destination = args.next().map(PathBuf::from);
+            }
+            other => {
+                eprintln!("tachyon: unknown argument: {}", other);
+                process::exit(2);
+            }
+        }
+    }
+    opts
+}
 
 fn help() { unimplemented!("help") }
 
