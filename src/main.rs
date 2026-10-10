@@ -1485,7 +1485,28 @@ impl Drop for ScreenGuard {
     }
 }
 
-fn read_key(tty: &mut fs::File) -> Option<Key> { unimplemented!("read_key") }
+fn read_key(tty: &mut fs::File) -> Option<Key> {
+    let mut byte = [0u8; 1];
+    tty.read_exact(&mut byte).ok()?;
+    match byte[0] {
+        0x1b => {
+            let mut sequence = [0u8; 2];
+            if tty.read_exact(&mut sequence).is_ok() {
+                match sequence {
+                    [0x5b, 0x41] => Some(Key::Up),
+                    [0x5b, 0x42] => Some(Key::Down),
+                    _ => Some(Key::Escape),
+                }
+            } else {
+                Some(Key::Escape)
+            }
+        }
+        0x0a | 0x0d => Some(Key::Enter),
+        0x7f | 0x08 => Some(Key::Backspace),
+        value if (32..127).contains(&value) => Some(Key::Char(value as char)),
+        _ => Some(Key::Other),
+    }
+}
 
 fn prompt_line(tty: &mut fs::File, label: &str) -> Option<String> { unimplemented!("prompt_line") }
 
