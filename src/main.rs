@@ -1352,7 +1352,35 @@ fn parse_args() -> Opts {
     opts
 }
 
-fn help() { unimplemented!("help") }
+fn help() {
+    println!(
+        "tachyon {}\n\
+         \n\
+         usage: tachyon [options]\n\
+         \n\
+         --demo            render synthetic values (no host reads)\n\
+         --tui             open the module/layout/album configurator\n\
+         --plain           no colours, no image\n\
+         --static          disable the reveal animation\n\
+         --no-logo         do not draw the kitty image logo\n\
+         --layout <name>   hud or stack\n\
+         --glyph <char>    section glyph (or random)\n\
+         --album <name>    pick the artwork from an album\n\
+         --theme <name>    override the active palette\n\
+         --variant <mode>  dark or light\n\
+         --seed <n>        deterministic layout/quote selection\n\
+         --logo <path>     PNG for the kitty graphics protocol\n\
+         --palettes <path> palette table (default ~/.local/share/tachyon/palettes.tsv)\n\
+         --quotes <path>   quote pool (default ~/.config/tachyon/quotes.txt)\n\
+         --config <path>   module/album config (default ~/.config/tachyon/fetch.conf)\n\
+         --state <path>    theme state (default ~/.local/state/tachyon/theme)\n\
+         --list-themes     print the palette table\n\
+         --convert <src> <dst>  convert an image to PNG (used for album ingest)\n\
+         -h, --help        show this help\n\
+         -V, --version     show the version",
+        VERSION
+    );
+}
 
 fn list_themes(opts: &Opts) { unimplemented!("list_themes") }
 
