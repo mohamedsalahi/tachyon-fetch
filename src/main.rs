@@ -1245,7 +1245,75 @@ fn render(
     title_variant: bool,
     demo: bool,
     enabled: Option<&[String]>,
-) -> Vec<Line> { unimplemented!("render") }
+) -> Vec<Line> {
+    let pal = &theme.pal;
+    let mut lines = Vec::new();
+
+    let mut header = Line::new();
+    header.push("TACHYON", Some(pal.accent), true);
+    header.push(" // ", Some(pal.dim), false);
+    header.push(if title_variant { "SYSTEMS" } else { "FLIGHT DECK" }, Some(pal.fg), true);
+    if demo {
+        header.push(" · SIM", Some(pal.warn), false);
+    }
+    let right = format!("{} · {}", theme.name.to_uppercase(), theme.mode.to_uppercase());
+    let right_width = width_of(&right);
+    if header.width + right_width + 2 <= width {
+        header.pad(width - header.width - right_width);
+        header.push(&right, Some(pal.dim), false);
+    }
+    lines.push(header);
+
+    let subtitle = format!("{}@{}", data.user, data.hostname);
+    let mut sub = Line::new();
+    sub.push(&subtitle, Some(pal.dim), false);
+    lines.push(sub);
+
+    let mut rule = Line::new();
+    rule.push(&"─".repeat(width), Some(pal.dim), false);
+    lines.push(rule);
+
+    let sections = build_sections(data, pal, enabled);
+    let two_columns = theme.layout != "stack"
+        && width >= 120
+        && !sections.core.is_empty()
+        && !(sections.system.is_empty() && sections.power.is_empty());
+
+    if two_columns {
+        let left_width = (width - 2) / 2;
+        let right_width = width - 2 - left_width;
+        let mut left = section(glyph, Section::System.title(), &sections.system, left_width, pal);
+        if !sections.power.is_empty() {
+            if !left.is_empty() {
+                left.push(Line::new());
+            }
+            left.extend(section(glyph, Section::Power.title(), &sections.power, left_width, pal));
+        }
+        let right = section(glyph, Section::Core.title(), &sections.core, right_width, pal);
+        lines.extend(hcat(&left, &right, left_width, 2));
+    } else {
+        for (section_kind, rows) in [
+            (Section::System, &sections.system),
+            (Section::Core, &sections.core),
+            (Section::Power, &sections.power),
+        ] {
+            if !rows.is_empty() {
+                lines.extend(section(glyph, section_kind.title(), rows, width, pal));
+            }
+        }
+    }
+
+    if !quote.is_empty() {
+        lines.push(Line::new());
+        let mut note = Line::new();
+        note.push("NOTE", Some(pal.accent2), true);
+        note.push("  ", None, false);
+        note.push(&truncate(quote, width.saturating_sub(6)), Some(pal.dim), false);
+        lines.push(note);
+    }
+
+    lines
+}
 
 fn parse_args() -> Opts { unimplemented!("parse_args") }
 
