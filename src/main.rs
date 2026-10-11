@@ -1532,7 +1532,20 @@ fn prompt_line(tty: &mut fs::File, label: &str) -> Option<String> {
     }
 }
 
-fn list_albums() -> Vec<String> { unimplemented!("list_albums") }
+fn list_albums() -> Vec<String> {
+    let mut albums: Vec<String> = fs::read_dir(albums_root())
+        .ok()
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter(|entry| entry.path().is_dir())
+                .map(|entry| entry.file_name().to_string_lossy().to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+    albums.sort();
+    albums
+}
 
 fn add_photo(album: &str, source: &Path) -> Result<PathBuf, String> { unimplemented!("add_photo") }
 
