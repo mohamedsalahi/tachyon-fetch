@@ -1787,7 +1787,64 @@ fn draw_tui(state: &TuiState, theme: &Theme, path: &Path, width: usize, height: 
     let _ = io::stdout().flush();
 }
 
-fn run_tui(opts: &Opts) { unimplemented!("run_tui") }
+fn run_tui(opts: &Opts) {
+    let mut tty = match fs::File::open("/dev/tty") {
+        Ok(file) => file,
+        Err(error) => {
+            eprintln!("tachyon: no tty: {}", error);
+            return;
+        }
+    };
+    let _raw = match RawTty::enable(&tty) {
+        Some(raw) => raw,
+        None => {
+            eprintln!("tachyon: cannot enter raw mode");
+            return;
+        }
+    };
+    print!("\x1b[?1049h\x1b[?25l");
+    let _ = io::stdout().flush();
+    let _screen = ScreenGuard;
+
+    let config_path = config_path(opts);
+    let config = load_config(&config_path);
+    let theme = load_theme(opts);
+    let mut state = TuiState::new(&config, &theme);
+
+    loop {
+        let (width, height, _, _) = term_size();
+        draw_tui(&state, &theme, &config_path, width, height);
+        let key = match read_key(&mut tty) {
+            Some(key) => key,
+            None => break,
+        };
+        match key {
+            Key::Char('q') => break,
+            Key::Char('j') | Key::Down => {
+                if !MODULES.is_empty() {
+                    state.cursor = (state.cursor + 1) % MODULES.len();
+                }
+            }
+            Key::Char('k') | Key::Up => {
+                if !MODULES.is_empty() {
+                    state.cursor = (state.cursor + MODULES.len() - 1) % MODULES.len();
+                }
+            }
+            Key::Char(' ') => {
+                if let Some(value) = state.enabled.get_mut(state.cursor) {
+                    *value = !*value;
+                }
+            }
+            Key::Char('g') => {},
+            Key::Char('l') => {},
+            Key::Char('m') => {},
+            Key::Char('b') => {},
+            Key::Char('a') => {},
+            Key::Char('s') => {},
+            _ => {}
+        }
+    }
+}
 
 fn main() {
     let mut opts = parse_args();
