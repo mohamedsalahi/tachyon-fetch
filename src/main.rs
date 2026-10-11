@@ -1580,7 +1580,19 @@ fn add_photo(album: &str, source: &Path) -> Result<PathBuf, String> {
     Ok(destination)
 }
 
-fn convert_photo(source: &Path, destination: &Path) -> Result<(), String> { unimplemented!("convert_photo") }
+fn convert_photo(source: &Path, destination: &Path) -> Result<(), String> {
+    let bytes = fs::read(source).map_err(|error| error.to_string())?;
+    let format = image::guess_format(&bytes).map_err(|error| error.to_string())?;
+    let picture = image::load_from_memory_with_format(&bytes, format).map_err(|error| error.to_string())?;
+    let picture = if picture.width() > 1600 {
+        picture.resize(1600, u32::MAX, image::imageops::FilterType::Lanczos3)
+    } else {
+        picture
+    };
+    picture
+        .save_with_format(destination, image::ImageFormat::Png)
+        .map_err(|error| error.to_string())
+}
 
 struct TuiState {
     enabled: Vec<bool>,
