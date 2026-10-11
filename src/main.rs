@@ -1683,7 +1683,109 @@ fn save_tui(path: &Path, state: &TuiState) -> io::Result<()> {
     fs::write(path, text)
 }
 
-fn draw_tui(state: &TuiState, theme: &Theme, path: &Path, width: usize, height: usize) { unimplemented!("draw_tui") }
+fn draw_tui(state: &TuiState, theme: &Theme, path: &Path, width: usize, height: usize) {
+    let pal = &theme.pal;
+    let left_width = 42.min(width.saturating_sub(30));
+    let mut output = String::from("\x1b[H\x1b[2J");
+
+    let mut header = Line::new();
+    header.push("TACHYON // CONFIG", Some(pal.accent), true);
+    let right = format!("{} · {}", theme.name.to_uppercase(), theme.mode.to_uppercase());
+    if header.width + right.chars().count() + 2 < width {
+        header.pad(width - header.width - right.chars().count());
+        header.push(&right, Some(pal.dim), false);
+    }
+    output.push_str(&header.text);
+    output.push_str("\r\n");
+
+    let mut rule = Line::new();
+    rule.push(&"─".repeat(width), Some(pal.dim), false);
+    output.push_str(&rule.text);
+    output.push_str("\r\n");
+
+    let visible = height.saturating_sub(10).max(6);
+    let start = state.cursor.saturating_sub(visible.saturating_sub(1));
+    let end = (start + visible).min(MODULES.len());
+    let enabled_count = state.enabled.iter().filter(|value| **value).count();
+
+    let layout_label = if state.layout == 0 {
+        format!("theme ({})", theme.layout)
+    } else {
+        LAYOUTS[state.layout].to_string()
+    };
+    let motion_label = if state.motion == 0 {
+        format!("theme ({})", theme.motion)
+    } else {
+        MOTIONS[state.motion].to_string()
+    };
+    let album_label = if state.album == 0 {
+        "(default)".to_string()
+    } else {
+        state.albums[state.album - 1].clone()
+    };
+    let settings = [
+        ("GLYPH", GLYPHS[state.glyph].to_string(), "g"),
+        ("LAYOUT", layout_label, "l"),
+        ("MOTION", motion_label, "m"),
+        ("ALBUM", album_label, "b"),
+        ("ADD", "photo to album".to_string(), "a"),
+        ("SAVE", path.display().to_string(), "s"),
+        ("QUIT", "".to_string(), "q"),
+    ];
+
+    let mut list_header = Line::new();
+    list_header.push(&format!("BAY {}/{}", enabled_count, MODULES.len()), Some(pal.accent2), true);
+    list_header.pad(left_width.saturating_sub(list_header.width));
+    list_header.push("   SETTINGS", Some(pal.accent2), true);
+    output.push_str(&list_header.text);
+    output.push_str("\r\n");
+
+    let rows = (end - start).max(settings.len());
+    for index in 0..rows {
+        let mut line = Line::new();
+        if let Some(module_index) = (start + index < end).then_some(start + index) {
+            let (_, label) = MODULES[module_index];
+            let enabled = state.enabled[module_index];
+            let selected = module_index == state.cursor;
+            line.push(if selected { "▸ " } else { "  " }, Some(pal.accent), true);
+            line.push(if enabled { "[+] " } else { "[ ] " }, Some(if enabled { pal.accent } else { pal.dim }), true);
+            line.push(label, Some(if enabled { pal.fg } else { pal.dim }), false);
+        }
+        line.pad(left_width.saturating_sub(line.width));
+        line.push("   ", None, false);
+        if let Some((key, value, hint)) = settings.get(index) {
+            line.push(key, Some(pal.dim), false);
+            line.push("  ", None, false);
+            line.push(&truncate(value, width.saturating_sub(left_width + 6)), Some(pal.fg), false);
+            if !hint.is_empty() {
+                line.push("  ", None, false);
+                line.push(hint, Some(pal.accent2), false);
+            }
+        }
+        output.push_str(&line.text);
+        output.push_str("\x1b[K\r\n");
+    }
+
+    output.push_str("\r\n");
+    let mut help = Line::new();
+    help.push(
+        "space toggle · j/k move · g glyph · l layout · m motion · b album · a add photo · s save · q quit",
+        Some(pal.dim),
+        false,
+    );
+    output.push_str(&truncate(&strip_ansi(&help.text), width));
+    output.push_str("\x1b[K\r\n");
+
+    let mut status = Line::new();
+    if !state.status.is_empty() {
+        status.push(&state.status, Some(pal.accent2), false);
+    }
+    output.push_str(&truncate(&strip_ansi(&status.text), width));
+    output.push_str("\x1b[K\r\n");
+
+    print!("{}", output);
+    let _ = io::stdout().flush();
+}
 
 fn run_tui(opts: &Opts) { unimplemented!("run_tui") }
 
