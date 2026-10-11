@@ -1606,7 +1606,50 @@ struct TuiState {
 }
 
 impl TuiState {
-    fn new(config: &Config, _theme: &Theme) -> Self { unimplemented!("new") }
+    fn new(config: &Config, _theme: &Theme) -> Self {
+        let enabled = MODULES
+            .iter()
+            .map(|(id, _)| {
+                config
+                    .enabled
+                    .as_ref()
+                    .map(|list| list.iter().any(|item| item == id))
+                    .unwrap_or(true)
+            })
+            .collect();
+        let glyph = config
+            .glyph
+            .as_deref()
+            .and_then(|value| GLYPHS.iter().position(|item| *item == value))
+            .unwrap_or(0);
+        let layout = config
+            .layout
+            .as_deref()
+            .and_then(|value| LAYOUTS.iter().position(|item| *item == value))
+            .unwrap_or(0);
+        let motion = config
+            .motion
+            .as_deref()
+            .and_then(|value| MOTIONS.iter().position(|item| *item == value))
+            .unwrap_or(0);
+        let albums = list_albums();
+        let album = config
+            .album
+            .as_ref()
+            .and_then(|name| albums.iter().position(|item| item == name))
+            .map(|index| index + 1)
+            .unwrap_or(0);
+        Self {
+            enabled,
+            cursor: 0,
+            glyph,
+            layout,
+            motion,
+            album,
+            albums,
+            status: "space toggle · s save · q quit".to_string(),
+        }
+    }
 }
 
 fn save_tui(path: &Path, state: &TuiState) -> io::Result<()> { unimplemented!("save_tui") }
