@@ -1652,7 +1652,36 @@ impl TuiState {
     }
 }
 
-fn save_tui(path: &Path, state: &TuiState) -> io::Result<()> { unimplemented!("save_tui") }
+fn save_tui(path: &Path, state: &TuiState) -> io::Result<()> {
+    let ids: Vec<&str> = MODULES
+        .iter()
+        .zip(&state.enabled)
+        .filter(|(_, enabled)| **enabled)
+        .map(|((id, _), _)| *id)
+        .collect();
+    let mut text = String::new();
+    if ids.is_empty() {
+        text.push_str("enabled=none\n");
+    } else if ids.len() == MODULES.len() {
+        text.push_str("enabled=all\n");
+    } else {
+        text.push_str(&format!("enabled={}\n", ids.join(",")));
+    }
+    text.push_str(&format!("glyph={}\n", GLYPHS[state.glyph]));
+    if state.layout > 0 {
+        text.push_str(&format!("layout={}\n", LAYOUTS[state.layout]));
+    }
+    if state.motion > 0 {
+        text.push_str(&format!("motion={}\n", MOTIONS[state.motion]));
+    }
+    if state.album > 0 {
+        text.push_str(&format!("album={}\n", state.albums[state.album - 1]));
+    }
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(path, text)
+}
 
 fn draw_tui(state: &TuiState, theme: &Theme, path: &Path, width: usize, height: usize) { unimplemented!("draw_tui") }
 
