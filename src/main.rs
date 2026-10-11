@@ -1508,7 +1508,29 @@ fn read_key(tty: &mut fs::File) -> Option<Key> {
     }
 }
 
-fn prompt_line(tty: &mut fs::File, label: &str) -> Option<String> { unimplemented!("prompt_line") }
+fn prompt_line(tty: &mut fs::File, label: &str) -> Option<String> {
+    print!("\x1b[H\x1b[2J{}", label);
+    let _ = io::stdout().flush();
+    let mut value = String::new();
+    loop {
+        match read_key(tty)? {
+            Key::Enter => return Some(value),
+            Key::Escape => return None,
+            Key::Backspace => {
+                if value.pop().is_some() {
+                    print!("\x08 \x08");
+                    let _ = io::stdout().flush();
+                }
+            }
+            Key::Char(c) => {
+                value.push(c);
+                print!("{}", c);
+                let _ = io::stdout().flush();
+            }
+            _ => {}
+        }
+    }
+}
 
 fn list_albums() -> Vec<String> { unimplemented!("list_albums") }
 
