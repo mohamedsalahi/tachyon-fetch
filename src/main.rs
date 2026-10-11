@@ -1547,7 +1547,38 @@ fn list_albums() -> Vec<String> {
     albums
 }
 
-fn add_photo(album: &str, source: &Path) -> Result<PathBuf, String> { unimplemented!("add_photo") }
+fn add_photo(album: &str, source: &Path) -> Result<PathBuf, String> {
+    if !source.is_file() {
+        return Err(format!("not a file: {}", source.display()));
+    }
+    let dir = albums_root().join(album);
+    fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
+    let stem: String = source
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("image")
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .collect();
+    let stem = if stem.is_empty() { "image".to_string() } else { stem };
+    let mut destination = dir.join(format!("{}.png", stem));
+    let mut index = 1;
+    while destination.exists() {
+        destination = dir.join(format!("{}-{}.png", stem, index));
+        index += 1;
+    }
+    let is_png = source
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.eq_ignore_ascii_case("png"))
+        .unwrap_or(false);
+    if is_png {
+        fs::copy(source, &destination).map_err(|error| error.to_string())?;
+    } else {
+        convert_photo(source, &destination)?;
+    }
+    Ok(destination)
+}
 
 fn convert_photo(source: &Path, destination: &Path) -> Result<(), String> { unimplemented!("convert_photo") }
 
