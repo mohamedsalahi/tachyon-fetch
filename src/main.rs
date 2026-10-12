@@ -1839,7 +1839,7 @@ fn run_tui(opts: &Opts) {
                     *value = !*value;
                 }
             }
-            Key::Char('g') => {},
+            Key::Char('g') => state.glyph = (state.glyph + 1) % GLYPHS.len(),
             Key::Char('l') => {},
             Key::Char('m') => {},
             Key::Char('b') => {},
