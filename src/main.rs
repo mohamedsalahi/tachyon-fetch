@@ -416,7 +416,9 @@ fn load_config(path: &Path) -> Config {
                 "layout" if value == "hud" || value == "stack" => {
                     config.layout = Some(value.to_string());
                 }
-                "motion" => {},
+                "motion" if value == "reveal" || value == "off" => {
+                    config.motion = Some(value.to_string());
+                }
                 _ => {}
             }
         }
