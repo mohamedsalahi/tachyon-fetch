@@ -413,7 +413,9 @@ fn load_config(path: &Path) -> Config {
                 "glyph" if !value.is_empty() => config.glyph = Some(value.to_string()),
                 "album" if !value.is_empty() => config.album = Some(value.to_string()),
                 "image" if !value.is_empty() => config.image = Some(PathBuf::from(value)),
-                "layout" => {},
+                "layout" if value == "hud" || value == "stack" => {
+                    config.layout = Some(value.to_string());
+                }
                 "motion" => {},
                 _ => {}
             }
