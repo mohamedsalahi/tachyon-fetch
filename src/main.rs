@@ -1843,7 +1843,30 @@ fn run_tui(opts: &Opts) {
             Key::Char('l') => state.layout = (state.layout + 1) % LAYOUTS.len(),
             Key::Char('m') => state.motion = (state.motion + 1) % MOTIONS.len(),
             Key::Char('b') => state.album = (state.album + 1) % (state.albums.len() + 1),
-            Key::Char('a') => {},
+            Key::Char('a') => {
+                let album = if state.album == 0 {
+                    "default".to_string()
+                } else {
+                    state.albums[state.album - 1].clone()
+                };
+                if let Some(source) = prompt_line(&mut tty, "photo path: ") {
+                    match add_photo(&album, Path::new(&source)) {
+                        Ok(destination) => {
+                            state.status = format!("added {}", destination.display());
+                            state.albums = list_albums();
+                            state.album = state
+                                .albums
+                                .iter()
+                                .position(|item| item == &album)
+                                .map(|index| index + 1)
+                                .unwrap_or(0);
+                        }
+                        Err(error) => state.status = error,
+                    }
+                } else {
+                    state.status = "cancelled".to_string();
+                }
+            }
             Key::Char('s') => {},
             _ => {}
         }
