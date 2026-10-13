@@ -1211,7 +1211,9 @@ fn build_sections(data: &FetchData, pal: &Palette, enabled: Option<&[String]>) -
     if on("os") {
         sections.system.push(Row { id: "os", key: "OS", value: data.os.clone(), tone: None });
     }
-    if on("host") {}
+    if on("host") {
+        sections.system.push(Row { id: "host", key: "Host", value: data.host.clone(), tone: None });
+    }
     if on("kernel") {}
     if on("uptime") {}
     if on("session") {}
