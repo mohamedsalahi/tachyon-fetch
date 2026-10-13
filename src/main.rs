@@ -1208,7 +1208,9 @@ fn build_sections(data: &FetchData, pal: &Palette, enabled: Option<&[String]>) -
     let on = |id: &str| enabled.map_or(true, |list| list.iter().any(|item| item == id));
     let mut sections = Sections::default();
 
-    if on("os") {}
+    if on("os") {
+        sections.system.push(Row { id: "os", key: "OS", value: data.os.clone(), tone: None });
+    }
     if on("host") {}
     if on("kernel") {}
     if on("uptime") {}
