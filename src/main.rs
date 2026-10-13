@@ -1867,7 +1867,10 @@ fn run_tui(opts: &Opts) {
                     state.status = "cancelled".to_string();
                 }
             }
-            Key::Char('s') => {},
+            Key::Char('s') => match save_tui(&config_path, &state) {
+                Ok(()) => state.status = format!("saved {}", config_path.display()),
+                Err(error) => state.status = format!("save failed: {}", error),
+            },
             _ => {}
         }
     }
