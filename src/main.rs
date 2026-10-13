@@ -1841,7 +1841,7 @@ fn run_tui(opts: &Opts) {
             }
             Key::Char('g') => state.glyph = (state.glyph + 1) % GLYPHS.len(),
             Key::Char('l') => state.layout = (state.layout + 1) % LAYOUTS.len(),
-            Key::Char('m') => {},
+            Key::Char('m') => state.motion = (state.motion + 1) % MOTIONS.len(),
             Key::Char('b') => {},
             Key::Char('a') => {},
             Key::Char('s') => {},
