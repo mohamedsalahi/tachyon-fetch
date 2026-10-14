@@ -1220,7 +1220,9 @@ fn build_sections(data: &FetchData, pal: &Palette, enabled: Option<&[String]>) -
     if on("uptime") {
         sections.system.push(Row { id: "uptime", key: "Uptime", value: data.uptime.clone(), tone: None });
     }
-    if on("session") {}
+    if on("session") {
+        sections.system.push(Row { id: "session", key: "Session", value: data.session.clone(), tone: None });
+    }
     if on("shell") {}
     if on("terminal") {}
     if on("compositor") {}
