@@ -1229,7 +1229,14 @@ fn build_sections(data: &FetchData, pal: &Palette, enabled: Option<&[String]>) -
     if on("terminal") {
         sections.system.push(Row { id: "terminal", key: "Terminal", value: data.terminal.clone(), tone: None });
     }
-    if on("compositor") {}
+    if on("compositor") {
+        sections.system.push(Row {
+            id: "compositor",
+            key: "Compositor",
+            value: data.compositor.clone(),
+            tone: None,
+        });
+    }
     if on("load") {}
 
     if on("cpu") {}
