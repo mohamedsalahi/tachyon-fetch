@@ -1237,7 +1237,15 @@ fn build_sections(data: &FetchData, pal: &Palette, enabled: Option<&[String]>) -
             tone: None,
         });
     }
-    if on("load") {}
+    if on("load") {
+        if let Some(load) = &data.load {
+            let first = load.split_whitespace().next().and_then(|v| v.parse::<f64>().ok());
+            let tone = first
+                .filter(|value| *value > data.cores as f64 * 0.9)
+                .map(|_| pal.warn);
+            sections.system.push(Row { id: "load", key: "Load", value: load.clone(), tone });
+        }
+    }
 
     if on("cpu") {}
     if on("gpu") {}
