@@ -1247,7 +1247,9 @@ fn build_sections(data: &FetchData, pal: &Palette, enabled: Option<&[String]>) -
         }
     }
 
-    if on("cpu") {}
+    if on("cpu") && !data.cpu.is_empty() {
+        sections.core.push(Row { id: "cpu", key: "CPU", value: data.cpu.clone(), tone: None });
+    }
     if on("gpu") {}
     if on("gpu_util") {}
     if on("gpu_vram") {}
