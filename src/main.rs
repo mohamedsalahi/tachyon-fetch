@@ -1255,7 +1255,16 @@ fn build_sections(data: &FetchData, pal: &Palette, enabled: Option<&[String]>) -
             sections.core.push(Row { id: "gpu", key: "GPU", value: gpu.clone(), tone: None });
         }
     }
-    if on("gpu_util") {}
+    if on("gpu_util") {
+        if let Some(utilization) = data.gpu_util {
+            sections.core.push(Row {
+                id: "gpu_util",
+                key: "GPU util",
+                value: format!("{}%", utilization),
+                tone: if utilization >= 95 { Some(pal.warn) } else { None },
+            });
+        }
+    }
     if on("gpu_vram") {}
     if on("memory") {}
     if on("swap") {}
