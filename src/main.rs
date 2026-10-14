@@ -1226,7 +1226,9 @@ fn build_sections(data: &FetchData, pal: &Palette, enabled: Option<&[String]>) -
     if on("shell") {
         sections.system.push(Row { id: "shell", key: "Shell", value: data.shell.clone(), tone: None });
     }
-    if on("terminal") {}
+    if on("terminal") {
+        sections.system.push(Row { id: "terminal", key: "Terminal", value: data.terminal.clone(), tone: None });
+    }
     if on("compositor") {}
     if on("load") {}
 
