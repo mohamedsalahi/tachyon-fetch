@@ -1250,7 +1250,11 @@ fn build_sections(data: &FetchData, pal: &Palette, enabled: Option<&[String]>) -
     if on("cpu") && !data.cpu.is_empty() {
         sections.core.push(Row { id: "cpu", key: "CPU", value: data.cpu.clone(), tone: None });
     }
-    if on("gpu") {}
+    if on("gpu") {
+        if let Some(gpu) = &data.gpu {
+            sections.core.push(Row { id: "gpu", key: "GPU", value: gpu.clone(), tone: None });
+        }
+    }
     if on("gpu_util") {}
     if on("gpu_vram") {}
     if on("memory") {}
