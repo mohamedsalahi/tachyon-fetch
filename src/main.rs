@@ -1306,7 +1306,16 @@ fn build_sections(data: &FetchData, pal: &Palette, enabled: Option<&[String]>) -
             });
         }
     }
-    if on("disk_code") {}
+    if on("disk_code") {
+        if let Some(code) = &data.code {
+            sections.core.push(Row {
+                id: "disk_code",
+                key: "Code",
+                value: code.clone(),
+                tone: disk_tone(data.code_pct),
+            });
+        }
+    }
     if on("ip") {}
     if on("link") {}
     if on("processes") {}
