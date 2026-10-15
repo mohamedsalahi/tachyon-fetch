@@ -1296,7 +1296,16 @@ fn build_sections(data: &FetchData, pal: &Palette, enabled: Option<&[String]>) -
             });
         }
     }
-    if on("disk_media") {}
+    if on("disk_media") {
+        if let Some(media) = &data.media {
+            sections.core.push(Row {
+                id: "disk_media",
+                key: "Media",
+                value: media.clone(),
+                tone: disk_tone(data.media_pct),
+            });
+        }
+    }
     if on("disk_code") {}
     if on("ip") {}
     if on("link") {}
