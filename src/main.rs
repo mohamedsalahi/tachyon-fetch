@@ -1286,7 +1286,16 @@ fn build_sections(data: &FetchData, pal: &Palette, enabled: Option<&[String]>) -
         }
     }
     let disk_tone = |pct: u8| if pct >= 90 { Some(pal.warn) } else { None };
-    if on("disk_root") {}
+    if on("disk_root") {
+        if let Some(disk) = &data.disk {
+            sections.core.push(Row {
+                id: "disk_root",
+                key: "Disk (/)",
+                value: disk.clone(),
+                tone: disk_tone(data.disk_pct),
+            });
+        }
+    }
     if on("disk_media") {}
     if on("disk_code") {}
     if on("ip") {}
