@@ -1279,7 +1279,12 @@ fn build_sections(data: &FetchData, pal: &Palette, enabled: Option<&[String]>) -
         let tone = if data.memory_pct >= 85 { Some(pal.warn) } else { None };
         sections.core.push(Row { id: "memory", key: "Memory", value: data.memory.clone(), tone });
     }
-    if on("swap") {}
+    if on("swap") {
+        if let Some(swap) = &data.swap {
+            let tone = if data.swap_pct >= 50 { Some(pal.warn) } else { None };
+            sections.core.push(Row { id: "swap", key: "Swap", value: swap.clone(), tone });
+        }
+    }
     let disk_tone = |pct: u8| if pct >= 90 { Some(pal.warn) } else { None };
     if on("disk_root") {}
     if on("disk_media") {}
