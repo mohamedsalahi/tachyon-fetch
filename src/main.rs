@@ -1265,7 +1265,16 @@ fn build_sections(data: &FetchData, pal: &Palette, enabled: Option<&[String]>) -
             });
         }
     }
-    if on("gpu_vram") {}
+    if on("gpu_vram") {
+        if let Some(vram) = &data.gpu_vram {
+            sections.core.push(Row {
+                id: "gpu_vram",
+                key: "VRAM",
+                value: vram.clone(),
+                tone: None,
+            });
+        }
+    }
     if on("memory") {}
     if on("swap") {}
     let disk_tone = |pct: u8| if pct >= 90 { Some(pal.warn) } else { None };
