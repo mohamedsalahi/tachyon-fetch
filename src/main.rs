@@ -1326,7 +1326,16 @@ fn build_sections(data: &FetchData, pal: &Palette, enabled: Option<&[String]>) -
             sections.core.push(Row { id: "link", key: "Link", value: link.clone(), tone: None });
         }
     }
-    if on("processes") {}
+    if on("processes") {
+        if let Some(processes) = &data.processes {
+            sections.core.push(Row {
+                id: "processes",
+                key: "Processes",
+                value: processes.clone(),
+                tone: None,
+            });
+        }
+    }
 
     if on("battery") {}
     if on("battery_health") {}
