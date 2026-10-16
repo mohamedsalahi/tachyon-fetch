@@ -1316,7 +1316,11 @@ fn build_sections(data: &FetchData, pal: &Palette, enabled: Option<&[String]>) -
             });
         }
     }
-    if on("ip") {}
+    if on("ip") {
+        if let Some(ip) = &data.ip {
+            sections.core.push(Row { id: "ip", key: "IP", value: ip.clone(), tone: None });
+        }
+    }
     if on("link") {}
     if on("processes") {}
 
