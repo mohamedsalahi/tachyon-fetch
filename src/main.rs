@@ -1360,7 +1360,23 @@ fn build_sections(data: &FetchData, pal: &Palette, enabled: Option<&[String]>) -
             });
         }
     }
-    if on("cpu_temp") {}
+    if on("cpu_temp") {
+        if let Some(temp) = data.cpu_temp {
+            let tone = if temp >= 95 {
+                Some(pal.err)
+            } else if temp >= 85 {
+                Some(pal.warn)
+            } else {
+                None
+            };
+            sections.power.push(Row {
+                id: "cpu_temp",
+                key: "CPU temp",
+                value: format!("{} °C", temp),
+                tone,
+            });
+        }
+    }
     if on("gpu_temp") {}
 
     sections
