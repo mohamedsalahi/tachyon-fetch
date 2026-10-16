@@ -1349,7 +1349,17 @@ fn build_sections(data: &FetchData, pal: &Palette, enabled: Option<&[String]>) -
             sections.power.push(Row { id: "battery", key: "Battery", value: battery.clone(), tone });
         }
     }
-    if on("battery_health") {}
+    if on("battery_health") {
+        if let Some(health) = data.battery_health {
+            let tone = if health <= 70 { Some(pal.warn) } else { None };
+            sections.power.push(Row {
+                id: "battery_health",
+                key: "Battery health",
+                value: format!("{}%", health),
+                tone,
+            });
+        }
+    }
     if on("cpu_temp") {}
     if on("gpu_temp") {}
 
