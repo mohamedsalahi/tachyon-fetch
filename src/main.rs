@@ -1337,7 +1337,18 @@ fn build_sections(data: &FetchData, pal: &Palette, enabled: Option<&[String]>) -
         }
     }
 
-    if on("battery") {}
+    if on("battery") {
+        if let Some(battery) = &data.battery {
+            let tone = if data.charging {
+                Some(pal.ok)
+            } else if data.battery_pct <= 15 {
+                Some(pal.err)
+            } else {
+                None
+            };
+            sections.power.push(Row { id: "battery", key: "Battery", value: battery.clone(), tone });
+        }
+    }
     if on("battery_health") {}
     if on("cpu_temp") {}
     if on("gpu_temp") {}
