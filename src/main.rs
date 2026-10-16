@@ -1377,7 +1377,23 @@ fn build_sections(data: &FetchData, pal: &Palette, enabled: Option<&[String]>) -
             });
         }
     }
-    if on("gpu_temp") {}
+    if on("gpu_temp") {
+        if let Some(temp) = data.gpu_temp {
+            let tone = if temp >= 95 {
+                Some(pal.err)
+            } else if temp >= 85 {
+                Some(pal.warn)
+            } else {
+                None
+            };
+            sections.power.push(Row {
+                id: "gpu_temp",
+                key: "GPU temp",
+                value: format!("{} °C", temp),
+                tone,
+            });
+        }
+    }
 
     sections
 }
