@@ -15,7 +15,7 @@ const FALLBACK_QUOTES: &[&str] = &[
     "Calm is a decision, not a state.",
     "The instrument does not care; the pilot does.",
     "Read twice, cut once, then verify.",
-    "Slow is smooth. Smooth is fast.",
+    "Slow is smooth; smooth is fast.",
     "A cold system is a kind system.",
     "Own the tool or serve it.",
     "Simplify until it hurts, then stop.",
