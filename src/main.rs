@@ -2110,7 +2110,7 @@ fn main() {
             let cols_for_logo = ((cols as f64) * 0.36).round() as usize;
             let cols_for_logo = cols_for_logo.clamp(24, 44);
             let indent = cols_for_logo + 3;
-            if cols <= indent + 52 {
+            if cols <= indent + 56 {
                 return None;
             }
             let cell_ratio = if xpixel > 0 && ypixel > 0 {
