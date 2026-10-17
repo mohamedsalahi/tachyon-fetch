@@ -857,7 +857,7 @@ fn battery_info() -> Option<(u8, String, bool, Option<u8>)> {
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty())
             .unwrap_or_else(|| "Unknown".to_string());
-        let charging = status == "AC" || status == "Full";
+        let charging = status == "Charging" || status == "Full";
         let health = ["energy_full", "charge_full"]
             .iter()
             .find_map(|full| {
