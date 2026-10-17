@@ -2119,7 +2119,7 @@ fn main() {
                 0.5
             };
             let rows = ((cols_for_logo as f64) * cell_ratio * (img_h as f64 / img_w as f64)).ceil() as usize;
-            Some((path, cols_for_logo, rows.max(2)))
+            Some((path, cols_for_logo, rows.max(3)))
         })
     } else {
         None
