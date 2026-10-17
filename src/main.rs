@@ -1080,7 +1080,7 @@ fn demo_data() -> FetchData {
         uptime: "2h 41m".to_string(),
         shell: "fish 4.0.1".to_string(),
         terminal: "kitty".to_string(),
-        compositor: "Umbriel".to_string(),
+        compositor: "Umbriel (Wayland)".to_string(),
         session: "wayland".to_string(),
         cores: 16,
         load: Some("0.42 0.51 0.47".to_string()),
