@@ -1159,7 +1159,7 @@ fn section(glyph: char, title: &str, rows: &[Row], width: usize, pal: &Palette) 
     if rows.is_empty() {
         return Vec::new();
     }
-    let keyw = rows.iter().map(|row| width_of(row.key)).max().unwrap_or(5);
+    let keyw = rows.iter().map(|row| width_of(row.key)).max().unwrap_or(4);
     let prefix = format!("{} {} ", glyph, title);
     let prefix_width = width_of(&prefix);
     let mut head = Line::new();
