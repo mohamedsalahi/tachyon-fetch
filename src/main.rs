@@ -1073,7 +1073,7 @@ fn collect_data() -> FetchData {
 fn demo_data() -> FetchData {
     FetchData {
         user: "pilot".to_string(),
-        hostname: "tuf15".to_string(),
+        hostname: "tuf-a15".to_string(),
         host: "ASUS TUF Gaming A15".to_string(),
         os: "NixOS 26.11 (x86_64)".to_string(),
         kernel: "6.16.0".to_string(),
