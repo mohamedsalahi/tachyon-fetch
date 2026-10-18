@@ -2107,7 +2107,7 @@ fn main() {
     let logo = if tty && !opts.plain && !opts.no_logo && theme.layout != "stack" && in_kitty() {
         select_logo(&opts, &config, &mut rng).and_then(|path| {
             let (img_w, img_h) = png_size(&path)?;
-            let cols_for_logo = ((cols as f64) * 0.36).round() as usize;
+            let cols_for_logo = ((cols as f64) * 0.34).round() as usize;
             let cols_for_logo = cols_for_logo.clamp(24, 44);
             let indent = cols_for_logo + 3;
             if cols <= indent + 56 {
