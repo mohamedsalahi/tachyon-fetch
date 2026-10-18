@@ -1953,7 +1953,7 @@ fn run_tui(opts: &Opts) {
     let mut tty = match fs::File::open("/dev/tty") {
         Ok(file) => file,
         Err(error) => {
-            eprintln!("tachyon: no tty: {}", error);
+            eprintln!("tachyon: cannot open /dev/tty: {}", error);
             return;
         }
     };
