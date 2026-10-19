@@ -1,13 +1,17 @@
 [package]
-name = "tachyon"
+name = "tachyon-fetch"
 version = "0.2.0"
 edition = "2021"
 license = "MIT"
 authors = ["Mohamed Salahi"]
 description = "A cockpit-grade system fetch engine with a built-in configurator"
-repository = "https://github.com/mohamedsalahi/tachyon"
+repository = "https://github.com/mohamedsalahi/tachyon-fetch"
 keywords = ["fetch", "system-information", "neofetch", "tui", "cli"]
 categories = ["command-line-utilities"]
+
+[[bin]]
+name = "tachyon"
+path = "src/main.rs"
 
 [dependencies]
 libc = "0.2.177"
