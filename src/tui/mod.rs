@@ -28,9 +28,7 @@ pub const PAGE_TITLES: [&str; 7] = [
     "Keys",
 ];
 
-pub const COLOR_NAMES: [&str; 8] = [
-    "bg", "fg", "dim", "accent", "accent2", "ok", "warn", "err",
-];
+pub const COLOR_NAMES: [&str; 8] = ["bg", "fg", "dim", "accent", "accent2", "ok", "warn", "err"];
 
 pub const RULES: [char; 8] = ['─', '═', '┄', '┈', '·', '.', '━', '~'];
 
@@ -85,7 +83,11 @@ impl<'a> App<'a> {
             .map(|text| text.lines().filter_map(crate::parse_palette_row).collect())
             .unwrap_or_default();
         let demo = opts.demo;
-        let data = if demo { crate::demo_data() } else { crate::collect_data(&cfg) };
+        let data = if demo {
+            crate::demo_data()
+        } else {
+            crate::collect_data(&cfg)
+        };
         let quotes = crate::load_quotes(&crate::quotes_path(opts));
         let quote = quotes.first().cloned().unwrap_or_default();
         let seed = std::time::SystemTime::now()
@@ -121,7 +123,11 @@ impl<'a> App<'a> {
     }
 
     pub fn refresh(&mut self) {
-        self.data = if self.demo { crate::demo_data() } else { crate::collect_data(&self.cfg) };
+        self.data = if self.demo {
+            crate::demo_data()
+        } else {
+            crate::collect_data(&self.cfg)
+        };
         self.history_mem.push(self.data.memory_pct as u64);
         self.history_swap.push(self.data.swap_pct as u64);
         if self.history_mem.len() > 120 {
@@ -162,7 +168,12 @@ impl<'a> App<'a> {
 
     pub fn enabled_list(&mut self) -> &mut Vec<String> {
         if self.cfg.enabled.is_none() {
-            self.cfg.enabled = Some(crate::MODULES.iter().map(|(id, _)| id.to_string()).collect());
+            self.cfg.enabled = Some(
+                crate::MODULES
+                    .iter()
+                    .map(|(id, _)| id.to_string())
+                    .collect(),
+            );
         }
         self.cfg.enabled.as_mut().unwrap()
     }
@@ -194,7 +205,7 @@ impl<'a> App<'a> {
     }
 
     pub fn effective_color(&self, index: usize) -> Rgb {
-        self.color(index).unwrap_or_else(|| match index {
+        self.color(index).unwrap_or(match index {
             0 => self.theme.pal.bg,
             1 => self.theme.pal.fg,
             2 => self.theme.pal.dim,

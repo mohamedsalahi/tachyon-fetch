@@ -74,3 +74,30 @@ pub fn wrap_index(index: usize, len: usize, delta: i64) -> usize {
     let value = index as i64 + delta;
     value.rem_euclid(len as i64) as usize
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn adjust_clamps_to_range() {
+        assert_eq!(adjust(10, 5, 0, 100), 15);
+        assert_eq!(adjust(99, 5, 0, 100), 100);
+        assert_eq!(adjust(0, -5, 0, 100), 0);
+        assert_eq!(adjust(50, 0, 10, 90), 50);
+    }
+
+    #[test]
+    fn wrap_index_wraps_both_ways() {
+        assert_eq!(wrap_index(0, 5, -1), 4);
+        assert_eq!(wrap_index(4, 5, 1), 0);
+        assert_eq!(wrap_index(3, 0, 1), 0);
+    }
+
+    #[test]
+    fn bar_fills_proportionally() {
+        let span = bar(50, 10, (255, 255, 255));
+        assert_eq!(span.content.chars().filter(|c| *c == '█').count(), 5);
+        assert_eq!(span.content.chars().filter(|c| *c == '░').count(), 5);
+    }
+}

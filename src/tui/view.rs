@@ -83,7 +83,10 @@ fn panel(title: &str, app: &App) -> Block<'static> {
     Block::bordered()
         .border_type(BorderType::Rounded)
         .border_style(util::fg(pal.dim))
-        .title(RSpan::styled(format!(" {} ", title), util::fg(pal.accent2).add_modifier(Modifier::BOLD)))
+        .title(RSpan::styled(
+            format!(" {} ", title),
+            util::fg(pal.accent2).add_modifier(Modifier::BOLD),
+        ))
 }
 
 fn list_state(index: usize) -> ListState {
@@ -107,7 +110,7 @@ fn modules(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
                 .cfg
                 .enabled
                 .as_ref()
-                .map_or(true, |list| list.iter().any(|item| item == id));
+                .is_none_or(|list| list.iter().any(|item| item == id));
             let mark = if enabled {
                 RSpan::styled("[x]", util::fg(pal.accent).add_modifier(Modifier::BOLD))
             } else {
@@ -127,7 +130,10 @@ fn modules(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         .as_ref()
         .map(|list| list.len())
         .unwrap_or(crate::MODULES.len());
-    let block = panel(&format!("modules {}/{}", enabled, crate::MODULES.len()), app);
+    let block = panel(
+        &format!("modules {}/{}", enabled, crate::MODULES.len()),
+        app,
+    );
     let list = List::new(items)
         .block(block)
         .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
@@ -136,15 +142,39 @@ fn modules(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 
 fn appearance(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let pal = app.theme.pal;
-    let layout = app.cfg.layout.clone().unwrap_or_else(|| app.theme.layout.clone());
-    let motion = app.cfg.motion.clone().unwrap_or_else(|| app.theme.motion.clone());
+    let layout = app
+        .cfg
+        .layout
+        .clone()
+        .unwrap_or_else(|| app.theme.layout.clone());
+    let motion = app
+        .cfg
+        .motion
+        .clone()
+        .unwrap_or_else(|| app.theme.motion.clone());
     let rows = vec![
         row("layout", &layout, app),
-        row("glyph", app.cfg.glyph.as_deref().unwrap_or("random (▸ ▚ ◆ ▰)"), app),
+        row(
+            "glyph",
+            app.cfg.glyph.as_deref().unwrap_or("random (▸ ▚ ◆ ▰)"),
+            app,
+        ),
         row("motion", &motion, app),
         row("rule", &app.cfg.rule_char().to_string(), app),
-        row("units", app.cfg.units.as_deref().unwrap_or("binary (GiB)"), app),
-        row("temperature", if app.cfg.fahrenheit() { "fahrenheit" } else { "celsius" }, app),
+        row(
+            "units",
+            app.cfg.units.as_deref().unwrap_or("binary (GiB)"),
+            app,
+        ),
+        row(
+            "temperature",
+            if app.cfg.fahrenheit() {
+                "fahrenheit"
+            } else {
+                "celsius"
+            },
+            app,
+        ),
     ];
     let table = Table::new(rows, [Constraint::Length(18), Constraint::Min(20)])
         .block(panel("appearance", app))
@@ -157,14 +187,25 @@ fn row(name: &str, value: &str, app: &App) -> Row<'static> {
     let pal = app.theme.pal;
     Row::new(vec![
         Cell::from(RSpan::styled(name.to_string(), util::fg(pal.dim))),
-        Cell::from(RSpan::styled(value.to_string(), util::fg(pal.fg).add_modifier(Modifier::BOLD))),
+        Cell::from(RSpan::styled(
+            value.to_string(),
+            util::fg(pal.fg).add_modifier(Modifier::BOLD),
+        )),
     ])
 }
 
 fn palette(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let pal = app.theme.pal;
-    let theme_name = app.cfg.theme.clone().unwrap_or_else(|| app.theme.name.clone());
-    let variant = app.cfg.variant.clone().unwrap_or_else(|| app.theme.mode.clone());
+    let theme_name = app
+        .cfg
+        .theme
+        .clone()
+        .unwrap_or_else(|| app.theme.name.clone());
+    let variant = app
+        .cfg
+        .variant
+        .clone()
+        .unwrap_or_else(|| app.theme.mode.clone());
     let mut rows = vec![
         row("theme", &theme_name, app),
         row("variant", &variant, app),
@@ -173,7 +214,11 @@ fn palette(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         let color = app.effective_color(index);
         let overridden = app.color(index).is_some();
         let swatch = RSpan::styled("    ", util::bg(color));
-        let label = if overridden { format!("{} *", name) } else { name.to_string() };
+        let label = if overridden {
+            format!("{} *", name)
+        } else {
+            name.to_string()
+        };
         rows.push(Row::new(vec![
             Cell::from(RSpan::styled(label, util::fg(pal.dim))),
             Cell::from(RLine::from(vec![
@@ -217,17 +262,39 @@ fn thresholds(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         .iter()
         .enumerate()
         .map(|(index, (name, value, unit))| {
-            let bar = util::bar(current[index], 20, if current[index] >= *value { pal.warn } else { pal.ok });
+            let bar = util::bar(
+                current[index],
+                20,
+                if current[index] >= *value {
+                    pal.warn
+                } else {
+                    pal.ok
+                },
+            );
             Row::new(vec![
                 Cell::from(RSpan::styled(*name, util::fg(pal.dim))),
-                Cell::from(RSpan::styled(format!("{}{}", value, unit), util::fg(pal.fg))),
-                Cell::from(RLine::from(vec![bar, RSpan::raw(" "), RSpan::styled(format!("now {}", current[index]), util::fg(pal.dim))])),
+                Cell::from(RSpan::styled(
+                    format!("{}{}", value, unit),
+                    util::fg(pal.fg),
+                )),
+                Cell::from(RLine::from(vec![
+                    bar,
+                    RSpan::raw(" "),
+                    RSpan::styled(format!("now {}", current[index]), util::fg(pal.dim)),
+                ])),
             ])
         })
         .collect();
-    let table = Table::new(rows, [Constraint::Length(14), Constraint::Length(8), Constraint::Min(24)])
-        .block(panel("thresholds", app))
-        .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED));
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(14),
+            Constraint::Length(8),
+            Constraint::Min(24),
+        ],
+    )
+    .block(panel("thresholds", app))
+    .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED));
     frame.render_stateful_widget(table, area, &mut table_state(app.cursors[3]));
 }
 
@@ -239,13 +306,29 @@ fn artwork(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         .as_ref()
         .map(|path| path.display().to_string())
         .unwrap_or_else(|| "(none)".to_string());
-    let album = app.cfg.album.clone().unwrap_or_else(|| "(none)".to_string());
+    let album = app
+        .cfg
+        .album
+        .clone()
+        .unwrap_or_else(|| "(none)".to_string());
     let rows = vec![
         row("image", &image, app),
         row("album", &album, app),
-        row("width %", &format!("{}", app.cfg.logo_width.unwrap_or(34)), app),
-        row("min cols", &format!("{}", app.cfg.logo_min.unwrap_or(26)), app),
-        row("max cols", &format!("{}", app.cfg.logo_max.unwrap_or(46)), app),
+        row(
+            "width %",
+            &format!("{}", app.cfg.logo_width.unwrap_or(34)),
+            app,
+        ),
+        row(
+            "min cols",
+            &format!("{}", app.cfg.logo_min.unwrap_or(26)),
+            app,
+        ),
+        row(
+            "max cols",
+            &format!("{}", app.cfg.logo_max.unwrap_or(46)),
+            app,
+        ),
         row("gap", &format!("{}", app.cfg.logo_gap.unwrap_or(3)), app),
     ];
     let table = Table::new(rows, [Constraint::Length(14), Constraint::Min(24)])
@@ -259,21 +342,32 @@ fn preview(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
     let pal = app.theme.pal;
     let chunks = Layout::vertical([Constraint::Min(6), Constraint::Length(3)]).split(area);
     let body = if chunks[0].width >= 92 {
-        let split = Layout::horizontal([Constraint::Min(50), Constraint::Length(36)]).split(chunks[0]);
+        let split =
+            Layout::horizontal([Constraint::Min(50), Constraint::Length(36)]).split(chunks[0]);
         (split[0], Some(split[1]))
     } else {
         (chunks[0], None)
     };
-    app.artwork_pane = body
-        .1
-        .map(|pane| pane.inner(ratatui::layout::Margin { vertical: 1, horizontal: 1 }));
+    app.artwork_pane = body.1.map(|pane| {
+        pane.inner(ratatui::layout::Margin {
+            vertical: 1,
+            horizontal: 1,
+        })
+    });
     if let Some(art) = body.1 {
         let note = app
             .artwork
             .as_ref()
-            .and_then(|path| path.file_name().map(|name| name.to_string_lossy().to_string()))
+            .and_then(|path| {
+                path.file_name()
+                    .map(|name| name.to_string_lossy().to_string())
+            })
             .unwrap_or_else(|| "no artwork selected".to_string());
-        let hint = if crate::in_kitty() { "kitty image" } else { "image renders in kitty" };
+        let hint = if crate::in_kitty() {
+            "kitty image"
+        } else {
+            "image renders in kitty"
+        };
         let text = Text::from(vec![
             RLine::from(""),
             RLine::from(RSpan::styled(format!("  {}", note), util::fg(pal.fg))),
@@ -309,21 +403,24 @@ fn preview(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
         .scroll((app.scroll as u16, 0));
     frame.render_widget(paragraph, body.0);
 
-    let graphs = Layout::horizontal([
-        Constraint::Percentage(50),
-        Constraint::Percentage(50),
-    ])
-    .split(chunks[1]);
+    let graphs = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(chunks[1]);
     let memory = Sparkline::default()
         .data(&app.history_mem)
         .max(100)
         .style(util::fg(pal.accent));
-    frame.render_widget(memory.block(Block::default().title(RSpan::styled(" memory %", util::fg(pal.dim)))), graphs[0]);
+    frame.render_widget(
+        memory.block(Block::default().title(RSpan::styled(" memory %", util::fg(pal.dim)))),
+        graphs[0],
+    );
     let swap = Sparkline::default()
         .data(&app.history_swap)
         .max(100)
         .style(util::fg(pal.accent2));
-    frame.render_widget(swap.block(Block::default().title(RSpan::styled(" swap %", util::fg(pal.dim)))), graphs[1]);
+    frame.render_widget(
+        swap.block(Block::default().title(RSpan::styled(" swap %", util::fg(pal.dim)))),
+        graphs[1],
+    );
 }
 
 fn keys(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
@@ -358,7 +455,10 @@ fn keys(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         "  built on ratatui · every change lands in fetch.conf on save",
         util::fg(pal.dim),
     )));
-    frame.render_widget(Paragraph::new(Text::from(text)).block(panel("keys", app)), area);
+    frame.render_widget(
+        Paragraph::new(Text::from(text)).block(panel("keys", app)),
+        area,
+    );
 }
 
 fn edit_popup(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
@@ -376,7 +476,10 @@ fn edit_popup(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     };
     let line = RLine::from(vec![
         RSpan::styled(" ", util::fg(pal.fg)),
-        RSpan::styled(edit.text.clone(), util::fg(pal.fg).add_modifier(Modifier::BOLD)),
+        RSpan::styled(
+            edit.text.clone(),
+            util::fg(pal.fg).add_modifier(Modifier::BOLD),
+        ),
         RSpan::styled("▏", util::fg(pal.accent)),
     ]);
     frame.render_widget(Paragraph::new(line).block(panel(title, app)), popup);
@@ -411,7 +514,8 @@ fn color_popup(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         util::fg(pal.dim),
     )));
     frame.render_widget(
-        Paragraph::new(Text::from(lines)).block(panel(&format!("color · {}", COLOR_NAMES[edit.row]), app)),
+        Paragraph::new(Text::from(lines))
+            .block(panel(&format!("color · {}", COLOR_NAMES[edit.row]), app)),
         popup,
     );
 }
