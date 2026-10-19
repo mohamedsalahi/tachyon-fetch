@@ -13,9 +13,10 @@
 </p>
 <p>
   <img alt="No runtime tooling" src="https://img.shields.io/badge/RUNTIME_TOOLING-0-6ee7ff?style=for-the-badge&labelColor=1b1f27">
-  <img alt="Release binary" src="https://img.shields.io/badge/BINARY-1.2_MB-8957e5?style=for-the-badge&labelColor=1b1f27">
+  <img alt="Release binary" src="https://img.shields.io/badge/BINARY-1.6_MB-8957e5?style=for-the-badge&labelColor=1b1f27">
   <img alt="Kitty graphics" src="https://img.shields.io/badge/KITTY-GRAPHICS-f778ba?style=for-the-badge&labelColor=1b1f27">
   <img alt="Built-in TUI" src="https://img.shields.io/badge/TUI-BUILT_IN-39c5cf?style=for-the-badge&labelColor=1b1f27">
+  <img alt="Powered by ratatui" src="https://img.shields.io/badge/POWERED_BY-RATATUI-ffb86b?style=for-the-badge&labelColor=1b1f27">
 </p>
 
 <br>
@@ -42,7 +43,7 @@ It is designed for people who want the truth about their systems at a glance —
 | **One process** | every value is collected in-process; no forks, no pipelines |
 | **HUD layout** | two-column flight-deck composition with a `stack` fallback for narrow terms |
 | **Reveal motion** | a short staged entrance, or silence with `--static` |
-| **Configurator** | `--tui` toggles modules, glyph, layout, motion and albums, then saves |
+| **Configurator** | `--tui` pages for modules, appearance, palette, thresholds and artwork, with a live preview |
 | **Palette engine** | reads a TSV palette table and the active theme state; built-in Solitude fallback |
 | **Artwork** | kitty graphics protocol with placement that never reflows text |
 | **Album rotation** | `$XDG_DATA_HOME/tachyon/albums/<name>/*.png`, picked deterministically with `--seed` |
@@ -148,15 +149,20 @@ NOTE  Simplify until it hurts, then stop.
 tachyon --tui
 ```
 
+Seven pages, one engine: **Modules · Appearance · Palette · Thresholds · Artwork · Preview · Keys**.
+
 ```text
-space  toggle module          g  cycle glyph
-j / k  move                   l  cycle layout
-a      add photo to album     m  cycle motion
-b      cycle album            s  save config
-q      quit
+tab / 1-7      switch page          space   toggle module
+j k / ↑ ↓      move · scroll        enter   edit · apply
+h l / ← →      adjust value         x       clear override
+a              add photo            p       copy palette to overrides
+s              save                 r       refresh live data
+q / ctrl-c     quit
 ```
 
-The panel edits the same plain-text configuration the renderer consumes. Nothing is written until `s`.
+The Palette page edits all eight palette slots with an RGB editor and live swatches; Thresholds tunes every warning level against the current reading; Artwork edits the image path, album and placement; Preview renders the real readout with memory and swap sparklines. Every change lands in `fetch.conf` on `s` — the same plain-text file the renderer consumes.
+
+Built on [ratatui](https://ratatui.rs); nothing runs between frames.
 
 <br>
 
@@ -171,8 +177,27 @@ enabled = os,host,kernel,uptime,session,cpu,memory,swap,disk_root,disk_media,gpu
 glyph  = ◆
 layout = hud
 motion = reveal
+theme  = Rose Pine
+rule   = ─
+units  = binary
+temp   = c
 image  = /home/you/Pictures/board.png
 album  = night
+
+memory_warn = 85
+swap_warn   = 50
+disk_warn   = 90
+battery_low = 15
+temp_warn   = 85
+temp_crit   = 95
+gpu_warn    = 95
+
+logo_width = 34
+logo_min   = 26
+logo_max   = 46
+logo_gap   = 3
+
+color.accent = #6ee7ff
 ```
 
 | Resource | Default |
@@ -214,6 +239,7 @@ If no palette table is present, Tachyon falls back to its own Solitude palette. 
 - **Direct collection.** `/proc` and `/sys` are parsed in place. DMI and hwmon are discovered, not assumed.
 - **NVML on demand.** The library is opened with `dlopen`; if the driver or the symbol is absent, GPU telemetry silently degrades.
 - **One write.** The frame is composed in memory and emitted once, so a slow terminal never tears the layout.
+- **One engine.** The configurator preview renders through the same layout code as the CLI.
 - **Contained unsafe.** `unsafe` is limited to the NVML ABI, termios and the terminal bindings.
 - **Nothing persistent except intent.** Renders do not write state; only an explicit configurator save does.
 - **No network.** Ever.
