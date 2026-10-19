@@ -9,7 +9,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 mod tui;
 
-const VERSION: &str = "0.3.0";
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const FALLBACK_QUOTES: &[&str] = &[
     "Precision is a form of mercy.",
@@ -57,7 +57,7 @@ unsafe fn nvml_symbol<T: Copy>(library: *mut libc::c_void, name: &[u8]) -> Optio
 fn nvml_open() -> Option<Nvml> {
     unsafe {
         let library = libc::dlopen(
-            b"libnvidia-ml.so.1\0".as_ptr() as *const libc::c_char,
+            c"libnvidia-ml.so.1".as_ptr(),
             libc::RTLD_LAZY | libc::RTLD_LOCAL,
         );
         if library.is_null() {
@@ -87,14 +87,22 @@ fn nvml_stats() -> Option<(u8, String, u8)> {
     unsafe {
         let mut utilization = NvmlUtilization { gpu: 0, memory: 0 };
         let has_utilization = (nvml.utilization)(nvml.device, &mut utilization) == 0;
-        let mut memory = NvmlMemory { total: 0, free: 0, used: 0 };
+        let mut memory = NvmlMemory {
+            total: 0,
+            free: 0,
+            used: 0,
+        };
         let has_memory = (nvml.memory)(nvml.device, &mut memory) == 0 && memory.total > 0;
         let mut temperature = 0u32;
         let has_temperature = (nvml.temperature)(nvml.device, 0, &mut temperature) == 0;
         if !has_utilization && !has_memory && !has_temperature {
             return None;
         }
-        let utilization_value = if has_utilization { utilization.gpu.min(100) as u8 } else { 0 };
+        let utilization_value = if has_utilization {
+            utilization.gpu.min(100) as u8
+        } else {
+            0
+        };
         let memory_text = if has_memory {
             format!(
                 "{} / {} ({:.0}%)",
@@ -214,7 +222,10 @@ impl Config {
     }
 
     fn rule_char(&self) -> char {
-        self.rule.as_deref().and_then(|value| value.chars().next()).unwrap_or('─')
+        self.rule
+            .as_deref()
+            .and_then(|value| value.chars().next())
+            .unwrap_or('─')
     }
 
     fn apply_colors(&self, pal: &mut Palette) {
@@ -315,7 +326,11 @@ struct Line {
 
 impl Line {
     fn new() -> Self {
-        Self { text: String::new(), width: 0, spans: Vec::new() }
+        Self {
+            text: String::new(),
+            width: 0,
+            spans: Vec::new(),
+        }
     }
 
     fn push(&mut self, text: &str, color: Option<Rgb>, bold: bool) {
@@ -328,7 +343,8 @@ impl Line {
         match color {
             Some((r, g, b)) => {
                 if bold {
-                    self.text.push_str(&format!("\x1b[1;38;2;{};{};{}m", r, g, b));
+                    self.text
+                        .push_str(&format!("\x1b[1;38;2;{};{};{}m", r, g, b));
                 } else {
                     self.text.push_str(&format!("\x1b[38;2;{};{};{}m", r, g, b));
                 }
@@ -391,7 +407,7 @@ fn truncate(text: &str, max: usize) -> String {
 
 fn b64(input: &[u8]) -> String {
     const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity((input.len() + 2) / 3 * 4);
+    let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
     for chunk in input.chunks(3) {
         let b0 = chunk[0];
         let b1 = *chunk.get(1).unwrap_or(&0);
@@ -413,11 +429,15 @@ fn b64(input: &[u8]) -> String {
 }
 
 fn home() -> PathBuf {
-    env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/"))
+    env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/"))
 }
 
 fn xdg(var: &str, fallback: &str) -> PathBuf {
-    env::var_os(var).map(PathBuf::from).unwrap_or_else(|| home().join(fallback))
+    env::var_os(var)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home().join(fallback))
 }
 
 fn palettes_path(opts: &Opts) -> PathBuf {
@@ -454,7 +474,10 @@ fn load_config(path: &Path) -> Config {
     let mut config = Config::default();
     if let Ok(text) = fs::read_to_string(path) {
         for line in text.lines() {
-            let line = line.split('#').next().unwrap_or("").trim();
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
             let Some((key, value)) = line.split_once('=') else {
                 continue;
             };
@@ -483,10 +506,18 @@ fn load_config(path: &Path) -> Config {
                     config.motion = Some(value.to_string());
                 }
                 "theme" if !value.is_empty() => config.theme = Some(value.to_string()),
-                "variant" if value == "dark" || value == "light" => config.variant = Some(value.to_string()),
-                "rule" if !value.is_empty() => config.rule = Some(value.chars().next().unwrap().to_string()),
-                "units" if value == "binary" || value == "si" => config.units = Some(value.to_string()),
-                "temp" if value == "c" || value == "f" => config.temp_unit = Some(value.to_string()),
+                "variant" if value == "dark" || value == "light" => {
+                    config.variant = Some(value.to_string())
+                }
+                "rule" if !value.is_empty() => {
+                    config.rule = Some(value.chars().next().unwrap().to_string())
+                }
+                "units" if value == "binary" || value == "si" => {
+                    config.units = Some(value.to_string())
+                }
+                "temp" if value == "c" || value == "f" => {
+                    config.temp_unit = Some(value.to_string())
+                }
                 "memory_warn" => config.memory_warn = value.parse().ok(),
                 "swap_warn" => config.swap_warn = value.parse().ok(),
                 "disk_warn" => config.disk_warn = value.parse().ok(),
@@ -516,7 +547,11 @@ fn load_config(path: &Path) -> Config {
 fn write_config(path: &Path, config: &Config) -> io::Result<()> {
     let mut out = String::from("# tachyon configuration\n");
     if let Some(enabled) = &config.enabled {
-        let list = if enabled.is_empty() { "none".to_string() } else { enabled.join(",") };
+        let list = if enabled.is_empty() {
+            "none".to_string()
+        } else {
+            enabled.join(",")
+        };
         out.push_str(&format!("enabled = {}\n", list));
     }
     if let Some(value) = &config.glyph {
@@ -628,8 +663,16 @@ fn read_state(path: &Path) -> (Option<String>, Option<String>) {
     match fs::read_to_string(path) {
         Ok(text) => {
             let mut lines = text.lines();
-            let name = lines.next().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
-            let mode = lines.next().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
+            let name = lines
+                .next()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string);
+            let mode = lines
+                .next()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string);
             (name, mode)
         }
         Err(_) => (None, None),
@@ -684,7 +727,8 @@ fn load_theme(opts: &Opts, config: &Config) -> Theme {
     let mut state_name = state_name;
     let mut state_mode = state_mode;
     if state_name.is_none() {
-        let omarchy = xdg("XDG_STATE_HOME", ".local/state").join("omarchy/current/theme/theme.name");
+        let omarchy =
+            xdg("XDG_STATE_HOME", ".local/state").join("omarchy/current/theme/theme.name");
         if let Ok(text) = fs::read_to_string(omarchy) {
             let name = text.trim();
             if !name.is_empty() {
@@ -719,7 +763,11 @@ fn load_theme(opts: &Opts, config: &Config) -> Theme {
     let chosen = pick(&mode)
         .or_else(|| pick("dark"))
         .or_else(|| pick("light"))
-        .or_else(|| rows.iter().find(|(name, _, _, _, _)| name == &wanted).cloned());
+        .or_else(|| {
+            rows.iter()
+                .find(|(name, _, _, _, _)| name == &wanted)
+                .cloned()
+        });
 
     let mut theme = match chosen {
         Some((name, variant, pal, layout, motion)) => Theme {
@@ -831,9 +879,15 @@ fn parse_meminfo(text: &str) -> Option<(u64, u64)> {
     let mut available = None;
     for line in text.lines() {
         if let Some(value) = line.strip_prefix("MemTotal:") {
-            total = value.split_whitespace().next().and_then(|v| v.parse::<u64>().ok());
+            total = value
+                .split_whitespace()
+                .next()
+                .and_then(|v| v.parse::<u64>().ok());
         } else if let Some(value) = line.strip_prefix("MemAvailable:") {
-            available = value.split_whitespace().next().and_then(|v| v.parse::<u64>().ok());
+            available = value
+                .split_whitespace()
+                .next()
+                .and_then(|v| v.parse::<u64>().ok());
         }
     }
     match (total, available) {
@@ -951,7 +1005,11 @@ fn fmt_uptime(seconds: u64) -> String {
 }
 
 fn fmt_size(bytes: u64, si: bool) -> String {
-    let (base, small, large) = if si { (1000.0_f64, "GB", "TB") } else { (1024.0_f64, "GiB", "TiB") };
+    let (base, small, large) = if si {
+        (1000.0_f64, "GB", "TB")
+    } else {
+        (1024.0_f64, "GiB", "TiB")
+    };
     let giga = base * base * base;
     let tera = giga * base;
     let value = bytes as f64;
@@ -975,7 +1033,9 @@ fn read_text(path: &str) -> Option<String> {
 }
 
 fn read_trim(path: &str) -> Option<String> {
-    read_text(path).map(|text| text.trim().to_string()).filter(|text| !text.is_empty())
+    read_text(path)
+        .map(|text| text.trim().to_string())
+        .filter(|text| !text.is_empty())
 }
 
 fn term_size() -> (usize, usize, usize, usize) {
@@ -1041,26 +1101,22 @@ fn battery_info() -> Option<(u8, String, bool, Option<u8>)> {
             .filter(|value| !value.is_empty())
             .unwrap_or_else(|| "Unknown".to_string());
         let charging = status == "Charging" || status == "Full";
-        let health = ["energy_full", "charge_full"]
-            .iter()
-            .find_map(|full| {
-                let design = if *full == "energy_full" {
-                    "energy_full_design"
-                } else {
-                    "charge_full_design"
-                };
-                let full_value = fs::read_to_string(entry.path().join(full))
-                    .ok()
-                    .and_then(|value| value.trim().parse::<u64>().ok())?;
-                let design_value = fs::read_to_string(entry.path().join(design))
-                    .ok()
-                    .and_then(|value| value.trim().parse::<u64>().ok())?;
-                if design_value > 0 {
-                    Some(((full_value * 100) / design_value) as u8)
-                } else {
-                    None
-                }
-            });
+        let health = ["energy_full", "charge_full"].iter().find_map(|full| {
+            let design = if *full == "energy_full" {
+                "energy_full_design"
+            } else {
+                "charge_full_design"
+            };
+            let full_value = fs::read_to_string(entry.path().join(full))
+                .ok()
+                .and_then(|value| value.trim().parse::<u64>().ok())?;
+            let design_value = fs::read_to_string(entry.path().join(design))
+                .ok()
+                .and_then(|value| value.trim().parse::<u64>().ok())?;
+            (full_value * 100)
+                .checked_div(design_value)
+                .map(|percent| percent as u8)
+        });
         return Some((capacity, status, charging, health));
     }
     None
@@ -1068,15 +1124,22 @@ fn battery_info() -> Option<(u8, String, bool, Option<u8>)> {
 
 fn collect_data(config: &Config) -> FetchData {
     let si = config.units_si();
-    let hostname = read_trim("/proc/sys/kernel/hostname").unwrap_or_else(|| "localhost".to_string());
+    let hostname =
+        read_trim("/proc/sys/kernel/hostname").unwrap_or_else(|| "localhost".to_string());
     let user = env::var("USER")
         .or_else(|_| env::var("LOGNAME"))
         .unwrap_or_else(|_| "user".to_string());
 
-    let os = read_text("/etc/os-release").map(|text| parse_os_release(&text)).unwrap_or_else(|| "Linux".to_string());
+    let os = read_text("/etc/os-release")
+        .map(|text| parse_os_release(&text))
+        .unwrap_or_else(|| "Linux".to_string());
     let kernel = read_trim("/proc/sys/kernel/osrelease").unwrap_or_else(|| "unknown".to_string());
     let uptime = read_text("/proc/uptime")
-        .and_then(|text| text.split_whitespace().next().and_then(|v| v.parse::<f64>().ok()))
+        .and_then(|text| {
+            text.split_whitespace()
+                .next()
+                .and_then(|v| v.parse::<f64>().ok())
+        })
         .map(|seconds| fmt_uptime(seconds as u64))
         .unwrap_or_else(|| "unknown".to_string());
 
@@ -1084,7 +1147,11 @@ fn collect_data(config: &Config) -> FetchData {
 
     let shell = env::var("SHELL")
         .ok()
-        .and_then(|value| Path::new(&value).file_name().map(|name| name.to_string_lossy().to_string()))
+        .and_then(|value| {
+            Path::new(&value)
+                .file_name()
+                .map(|name| name.to_string_lossy().to_string())
+        })
         .unwrap_or_else(|| "sh".to_string());
 
     let terminal = if env::var_os("KITTY_WINDOW_ID").is_some() {
@@ -1138,26 +1205,49 @@ fn collect_data(config: &Config) -> FetchData {
     let (memory, memory_pct) = match meminfo.as_deref().and_then(parse_meminfo) {
         Some((total, available)) => {
             let used = total.saturating_sub(available);
-            let divisor = if si { 1_000_000_000.0 } else { 1024.0 * 1024.0 * 1024.0 };
+            let divisor = if si {
+                1_000_000_000.0
+            } else {
+                1024.0 * 1024.0 * 1024.0
+            };
             let unit = if si { "GB" } else { "GiB" };
             let total_value = total as f64 * 1024.0 / divisor;
             let used_value = used as f64 * 1024.0 / divisor;
-            let percent = if total > 0 { (used * 100 / total) as u8 } else { 0 };
-            (format!("{:.1} / {:.1} {} ({}%)", used_value, total_value, unit, percent), percent)
+            let percent = (used * 100).checked_div(total).unwrap_or(0) as u8;
+            (
+                format!(
+                    "{:.1} / {:.1} {} ({}%)",
+                    used_value, total_value, unit, percent
+                ),
+                percent,
+            )
         }
         None => ("unknown".to_string(), 0),
     };
 
     let (swap, swap_pct) = match meminfo.as_deref() {
-        Some(text) => match (meminfo_value(text, "SwapTotal:"), meminfo_value(text, "SwapFree:")) {
+        Some(text) => match (
+            meminfo_value(text, "SwapTotal:"),
+            meminfo_value(text, "SwapFree:"),
+        ) {
             (Some(total), Some(free)) if total > 0 => {
                 let used = total.saturating_sub(free);
                 let percent = (used * 100 / total) as u8;
                 (
                     Some(format!(
                         "{:.1} / {:.1} {} ({}%)",
-                        used as f64 * 1024.0 / if si { 1_000_000_000.0 } else { 1024.0 * 1024.0 * 1024.0 },
-                        total as f64 * 1024.0 / if si { 1_000_000_000.0 } else { 1024.0 * 1024.0 * 1024.0 },
+                        used as f64 * 1024.0
+                            / if si {
+                                1_000_000_000.0
+                            } else {
+                                1024.0 * 1024.0 * 1024.0
+                            },
+                        total as f64 * 1024.0
+                            / if si {
+                                1_000_000_000.0
+                            } else {
+                                1024.0 * 1024.0 * 1024.0
+                            },
                         if si { "GB" } else { "GiB" },
                         percent
                     )),
@@ -1178,7 +1268,15 @@ fn collect_data(config: &Config) -> FetchData {
             return None;
         }
         let percent = (used * 100 / total) as u8;
-        Some((format!("{} / {} ({}%)", fmt_size(used, si), fmt_size(total, si), percent), percent))
+        Some((
+            format!(
+                "{} / {} ({}%)",
+                fmt_size(used, si),
+                fmt_size(total, si),
+                percent
+            ),
+            percent,
+        ))
     };
 
     let (disk, disk_pct) = match mount("/") {
@@ -1199,9 +1297,12 @@ fn collect_data(config: &Config) -> FetchData {
     let processes = process_count();
 
     let (battery, battery_pct, charging, battery_health) = match battery_info() {
-        Some((capacity, status, charging, health)) => {
-            (Some(format!("{}% [{}]", capacity, status)), capacity, charging, health)
-        }
+        Some((capacity, status, charging, health)) => (
+            Some(format!("{}% [{}]", capacity, status)),
+            capacity,
+            charging,
+            health,
+        ),
         None => (None, 0, false, None),
     };
 
@@ -1317,8 +1418,12 @@ fn in_kitty() -> bool {
         return false;
     }
     env::var_os("KITTY_WINDOW_ID").is_some()
-        || env::var("TERM").map(|value| value.contains("kitty")).unwrap_or(false)
-        || env::var("TERM_PROGRAM").map(|value| value == "kitty").unwrap_or(false)
+        || env::var("TERM")
+            .map(|value| value.contains("kitty"))
+            .unwrap_or(false)
+        || env::var("TERM_PROGRAM")
+            .map(|value| value == "kitty")
+            .unwrap_or(false)
 }
 
 fn select_logo(opts: &Opts, config: &Config, rng: &mut u64) -> Option<PathBuf> {
@@ -1342,7 +1447,14 @@ fn select_logo(opts: &Opts, config: &Config, rng: &mut u64) -> Option<PathBuf> {
     png_size(&path).map(|_| path)
 }
 
-fn section(glyph: char, title: &str, rows: &[Row], width: usize, pal: &Palette, rule: char) -> Vec<Line> {
+fn section(
+    glyph: char,
+    title: &str,
+    rows: &[Row],
+    width: usize,
+    pal: &Palette,
+    rule: char,
+) -> Vec<Line> {
     if rows.is_empty() {
         return Vec::new();
     }
@@ -1352,7 +1464,11 @@ fn section(glyph: char, title: &str, rows: &[Row], width: usize, pal: &Palette, 
     let mut head = Line::new();
     head.push(&prefix, Some(pal.accent2), true);
     if width > prefix_width {
-        head.push(&rule.to_string().repeat(width - prefix_width), Some(pal.dim), false);
+        head.push(
+            &rule.to_string().repeat(width - prefix_width),
+            Some(pal.dim),
+            false,
+        );
     }
     let mut lines = vec![head];
     for row in rows {
@@ -1361,7 +1477,11 @@ fn section(glyph: char, title: &str, rows: &[Row], width: usize, pal: &Palette, 
         line.push(&key_padded, Some(pal.dim), false);
         line.push("  ", None, false);
         let available = width.saturating_sub(keyw + 2);
-        line.push(&truncate(&row.value, available), row.tone.or(Some(pal.fg)), false);
+        line.push(
+            &truncate(&row.value, available),
+            row.tone.or(Some(pal.fg)),
+            false,
+        );
         lines.push(line);
     }
     lines
@@ -1387,7 +1507,12 @@ fn hcat(left: &[Line], right: &[Line], left_width: usize, gap: usize) -> Vec<Lin
 }
 
 fn build_sections(data: &FetchData, pal: &Palette, config: &Config) -> Sections {
-    let on = |id: &str| config.enabled.as_deref().map_or(true, |list| list.iter().any(|item| item == id));
+    let on = |id: &str| {
+        config
+            .enabled
+            .as_deref()
+            .is_none_or(|list| list.iter().any(|item| item == id))
+    };
     let memory_warn = config.memory_warn.unwrap_or(85);
     let swap_warn = config.swap_warn.unwrap_or(50);
     let disk_warn = config.disk_warn.unwrap_or(90);
@@ -1398,25 +1523,60 @@ fn build_sections(data: &FetchData, pal: &Palette, config: &Config) -> Sections 
     let mut sections = Sections::default();
 
     if on("os") {
-        sections.system.push(Row { id: "os", key: "OS", value: data.os.clone(), tone: None });
+        sections.system.push(Row {
+            id: "os",
+            key: "OS",
+            value: data.os.clone(),
+            tone: None,
+        });
     }
     if on("host") {
-        sections.system.push(Row { id: "host", key: "Host", value: data.host.clone(), tone: None });
+        sections.system.push(Row {
+            id: "host",
+            key: "Host",
+            value: data.host.clone(),
+            tone: None,
+        });
     }
     if on("kernel") {
-        sections.system.push(Row { id: "kernel", key: "Kernel", value: data.kernel.clone(), tone: None });
+        sections.system.push(Row {
+            id: "kernel",
+            key: "Kernel",
+            value: data.kernel.clone(),
+            tone: None,
+        });
     }
     if on("uptime") {
-        sections.system.push(Row { id: "uptime", key: "Uptime", value: data.uptime.clone(), tone: None });
+        sections.system.push(Row {
+            id: "uptime",
+            key: "Uptime",
+            value: data.uptime.clone(),
+            tone: None,
+        });
     }
     if on("session") {
-        sections.system.push(Row { id: "session", key: "Session", value: data.session.clone(), tone: None });
+        sections.system.push(Row {
+            id: "session",
+            key: "Session",
+            value: data.session.clone(),
+            tone: None,
+        });
     }
     if on("shell") {
-        sections.system.push(Row { id: "shell", key: "Shell", value: data.shell.clone(), tone: None });
+        sections.system.push(Row {
+            id: "shell",
+            key: "Shell",
+            value: data.shell.clone(),
+            tone: None,
+        });
     }
     if on("terminal") {
-        sections.system.push(Row { id: "terminal", key: "Terminal", value: data.terminal.clone(), tone: None });
+        sections.system.push(Row {
+            id: "terminal",
+            key: "Terminal",
+            value: data.terminal.clone(),
+            tone: None,
+        });
     }
     if on("compositor") {
         sections.system.push(Row {
@@ -1428,20 +1588,38 @@ fn build_sections(data: &FetchData, pal: &Palette, config: &Config) -> Sections 
     }
     if on("load") {
         if let Some(load) = &data.load {
-            let first = load.split_whitespace().next().and_then(|v| v.parse::<f64>().ok());
+            let first = load
+                .split_whitespace()
+                .next()
+                .and_then(|v| v.parse::<f64>().ok());
             let tone = first
                 .filter(|value| *value > data.cores as f64 * 0.9)
                 .map(|_| pal.warn);
-            sections.system.push(Row { id: "load", key: "Load", value: load.clone(), tone });
+            sections.system.push(Row {
+                id: "load",
+                key: "Load",
+                value: load.clone(),
+                tone,
+            });
         }
     }
 
     if on("cpu") && !data.cpu.is_empty() {
-        sections.core.push(Row { id: "cpu", key: "CPU", value: data.cpu.clone(), tone: None });
+        sections.core.push(Row {
+            id: "cpu",
+            key: "CPU",
+            value: data.cpu.clone(),
+            tone: None,
+        });
     }
     if on("gpu") {
         if let Some(gpu) = &data.gpu {
-            sections.core.push(Row { id: "gpu", key: "GPU", value: gpu.clone(), tone: None });
+            sections.core.push(Row {
+                id: "gpu",
+                key: "GPU",
+                value: gpu.clone(),
+                tone: None,
+            });
         }
     }
     if on("gpu_util") {
@@ -1450,7 +1628,11 @@ fn build_sections(data: &FetchData, pal: &Palette, config: &Config) -> Sections 
                 id: "gpu_util",
                 key: "GPU util",
                 value: format!("{}%", utilization),
-                tone: if utilization >= gpu_warn { Some(pal.warn) } else { None },
+                tone: if utilization >= gpu_warn {
+                    Some(pal.warn)
+                } else {
+                    None
+                },
             });
         }
     }
@@ -1465,16 +1647,40 @@ fn build_sections(data: &FetchData, pal: &Palette, config: &Config) -> Sections 
         }
     }
     if on("memory") {
-        let tone = if data.memory_pct >= memory_warn { Some(pal.warn) } else { None };
-        sections.core.push(Row { id: "memory", key: "Memory", value: data.memory.clone(), tone });
+        let tone = if data.memory_pct >= memory_warn {
+            Some(pal.warn)
+        } else {
+            None
+        };
+        sections.core.push(Row {
+            id: "memory",
+            key: "Memory",
+            value: data.memory.clone(),
+            tone,
+        });
     }
     if on("swap") {
         if let Some(swap) = &data.swap {
-            let tone = if data.swap_pct >= swap_warn { Some(pal.warn) } else { None };
-            sections.core.push(Row { id: "swap", key: "Swap", value: swap.clone(), tone });
+            let tone = if data.swap_pct >= swap_warn {
+                Some(pal.warn)
+            } else {
+                None
+            };
+            sections.core.push(Row {
+                id: "swap",
+                key: "Swap",
+                value: swap.clone(),
+                tone,
+            });
         }
     }
-    let disk_tone = |pct: u8| if pct >= disk_warn { Some(pal.warn) } else { None };
+    let disk_tone = |pct: u8| {
+        if pct >= disk_warn {
+            Some(pal.warn)
+        } else {
+            None
+        }
+    };
     if on("disk_root") {
         if let Some(disk) = &data.disk {
             sections.core.push(Row {
@@ -1507,12 +1713,22 @@ fn build_sections(data: &FetchData, pal: &Palette, config: &Config) -> Sections 
     }
     if on("ip") {
         if let Some(ip) = &data.ip {
-            sections.core.push(Row { id: "ip", key: "IP", value: ip.clone(), tone: None });
+            sections.core.push(Row {
+                id: "ip",
+                key: "IP",
+                value: ip.clone(),
+                tone: None,
+            });
         }
     }
     if on("link") {
         if let Some(link) = &data.link {
-            sections.core.push(Row { id: "link", key: "Link", value: link.clone(), tone: None });
+            sections.core.push(Row {
+                id: "link",
+                key: "Link",
+                value: link.clone(),
+                tone: None,
+            });
         }
     }
     if on("processes") {
@@ -1535,7 +1751,12 @@ fn build_sections(data: &FetchData, pal: &Palette, config: &Config) -> Sections 
             } else {
                 None
             };
-            sections.power.push(Row { id: "battery", key: "Battery", value: battery.clone(), tone });
+            sections.power.push(Row {
+                id: "battery",
+                key: "Battery",
+                value: battery.clone(),
+                tone,
+            });
         }
     }
     if on("battery_health") {
@@ -1561,7 +1782,7 @@ fn build_sections(data: &FetchData, pal: &Palette, config: &Config) -> Sections 
             sections.power.push(Row {
                 id: "cpu_temp",
                 key: "CPU temp",
-                value: format!("{}", fmt_temp(temp, config.fahrenheit())),
+                value: fmt_temp(temp, config.fahrenheit()),
                 tone,
             });
         }
@@ -1578,7 +1799,7 @@ fn build_sections(data: &FetchData, pal: &Palette, config: &Config) -> Sections 
             sections.power.push(Row {
                 id: "gpu_temp",
                 key: "GPU temp",
-                value: format!("{}", fmt_temp(temp, config.fahrenheit())),
+                value: fmt_temp(temp, config.fahrenheit()),
                 tone,
             });
         }
@@ -1587,6 +1808,7 @@ fn build_sections(data: &FetchData, pal: &Palette, config: &Config) -> Sections 
     sections
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render(
     theme: &Theme,
     data: &FetchData,
@@ -1604,11 +1826,23 @@ fn render(
     let mut header = Line::new();
     header.push("TACHYON", Some(pal.accent), true);
     header.push(" // ", Some(pal.dim), false);
-    header.push(if title_variant { "SYSTEMS" } else { "FLIGHT DECK" }, Some(pal.fg), true);
+    header.push(
+        if title_variant {
+            "SYSTEMS"
+        } else {
+            "FLIGHT DECK"
+        },
+        Some(pal.fg),
+        true,
+    );
     if demo {
         header.push(" · SIM", Some(pal.warn), false);
     }
-    let right = format!("{} · {}", theme.name.to_uppercase(), theme.mode.to_uppercase());
+    let right = format!(
+        "{} · {}",
+        theme.name.to_uppercase(),
+        theme.mode.to_uppercase()
+    );
     let right_width = width_of(&right);
     if header.width + right_width + 2 <= width {
         header.pad(width - header.width - right_width);
@@ -1634,14 +1868,35 @@ fn render(
     if two_columns {
         let left_width = (width - 2) / 2;
         let right_width = width - 2 - left_width;
-        let mut left = section(glyph, Section::System.title(), &sections.system, left_width, pal, rule_char);
+        let mut left = section(
+            glyph,
+            Section::System.title(),
+            &sections.system,
+            left_width,
+            pal,
+            rule_char,
+        );
         if !sections.power.is_empty() {
             if !left.is_empty() {
                 left.push(Line::new());
             }
-            left.extend(section(glyph, Section::Power.title(), &sections.power, left_width, pal, rule_char));
+            left.extend(section(
+                glyph,
+                Section::Power.title(),
+                &sections.power,
+                left_width,
+                pal,
+                rule_char,
+            ));
         }
-        let right = section(glyph, Section::Core.title(), &sections.core, right_width, pal, rule_char);
+        let right = section(
+            glyph,
+            Section::Core.title(),
+            &sections.core,
+            right_width,
+            pal,
+            rule_char,
+        );
         lines.extend(hcat(&left, &right, left_width, 2));
     } else {
         for (section_kind, rows) in [
@@ -1650,7 +1905,14 @@ fn render(
             (Section::Power, &sections.power),
         ] {
             if !rows.is_empty() {
-                lines.extend(section(glyph, section_kind.title(), rows, width, pal, rule_char));
+                lines.extend(section(
+                    glyph,
+                    section_kind.title(),
+                    rows,
+                    width,
+                    pal,
+                    rule_char,
+                ));
             }
         }
     }
@@ -1660,11 +1922,26 @@ fn render(
         let mut note = Line::new();
         note.push("NOTE", Some(pal.accent2), true);
         note.push("  ", None, false);
-        note.push(&truncate(quote, width.saturating_sub(6)), Some(pal.dim), false);
+        note.push(
+            &truncate(quote, width.saturating_sub(6)),
+            Some(pal.dim),
+            false,
+        );
         lines.push(note);
     }
 
     lines
+}
+
+fn argument(args: &mut impl Iterator<Item = String>, flag: &str) -> String {
+    match args.next() {
+        Some(value) => value,
+        None => {
+            eprintln!("tachyon: missing value for {}", flag);
+            eprintln!("tachyon: run 'tachyon --help' for usage");
+            process::exit(2);
+        }
+    }
 }
 
 fn parse_args() -> Opts {
@@ -1680,20 +1957,31 @@ fn parse_args() -> Opts {
             "-V" | "--version" => opts.version = true,
             "--list-themes" => opts.list_themes = true,
             "--tui" => opts.tui = true,
-            "--layout" => opts.layout = args.next(),
-            "--glyph" => opts.glyph = args.next(),
-            "--album" => opts.album = args.next(),
-            "--theme" => opts.theme = args.next(),
-            "--variant" => opts.variant = args.next(),
-            "--seed" => opts.seed = args.next().and_then(|value| value.parse().ok()),
-            "--logo" => opts.logo = args.next().map(PathBuf::from),
-            "--palettes" => opts.palettes = args.next().map(PathBuf::from),
-            "--quotes" => opts.quotes = args.next().map(PathBuf::from),
-            "--config" => opts.config = args.next().map(PathBuf::from),
-            "--state" => opts.state = args.next().map(PathBuf::from),
+            "--layout" => opts.layout = Some(argument(&mut args, "--layout")),
+            "--glyph" => opts.glyph = Some(argument(&mut args, "--glyph")),
+            "--album" => opts.album = Some(argument(&mut args, "--album")),
+            "--theme" => opts.theme = Some(argument(&mut args, "--theme")),
+            "--variant" => opts.variant = Some(argument(&mut args, "--variant")),
+            "--seed" => {
+                let raw = argument(&mut args, "--seed");
+                match raw.parse() {
+                    Ok(seed) => opts.seed = Some(seed),
+                    Err(_) => {
+                        eprintln!("tachyon: invalid seed: {}", raw);
+                        process::exit(2);
+                    }
+                }
+            }
+            "--logo" => opts.logo = Some(PathBuf::from(argument(&mut args, "--logo"))),
+            "--palettes" => opts.palettes = Some(PathBuf::from(argument(&mut args, "--palettes"))),
+            "--quotes" => opts.quotes = Some(PathBuf::from(argument(&mut args, "--quotes"))),
+            "--config" => opts.config = Some(PathBuf::from(argument(&mut args, "--config"))),
+            "--state" => opts.state = Some(PathBuf::from(argument(&mut args, "--state"))),
             "--convert" => {
-                opts.convert_source = args.next().map(PathBuf::from);
-                opts.convert_destination = args.next().map(PathBuf::from);
+                let source = argument(&mut args, "--convert");
+                let destination = argument(&mut args, "--convert");
+                opts.convert_source = Some(PathBuf::from(source));
+                opts.convert_destination = Some(PathBuf::from(destination));
             }
             other => {
                 eprintln!("tachyon: unknown argument: {}", other);
@@ -1809,9 +2097,19 @@ fn add_photo(album: &str, source: &Path) -> Result<PathBuf, String> {
         .and_then(|value| value.to_str())
         .unwrap_or("image")
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '-'
+            }
+        })
         .collect();
-    let stem = if stem.is_empty() { "image".to_string() } else { stem };
+    let stem = if stem.is_empty() {
+        "image".to_string()
+    } else {
+        stem
+    };
     let mut destination = dir.join(format!("{}.png", stem));
     let mut index = 1;
     while destination.exists() {
@@ -1834,7 +2132,8 @@ fn add_photo(album: &str, source: &Path) -> Result<PathBuf, String> {
 fn convert_photo(source: &Path, destination: &Path) -> Result<(), String> {
     let bytes = fs::read(source).map_err(|error| error.to_string())?;
     let format = image::guess_format(&bytes).map_err(|error| error.to_string())?;
-    let picture = image::load_from_memory_with_format(&bytes, format).map_err(|error| error.to_string())?;
+    let picture =
+        image::load_from_memory_with_format(&bytes, format).map_err(|error| error.to_string())?;
     let picture = if picture.width() > 1600 {
         picture.resize(1600, u32::MAX, image::imageops::FilterType::Lanczos3)
     } else {
@@ -1888,11 +2187,21 @@ fn main() {
         .clone()
         .or_else(|| config.layout.clone())
         .unwrap_or_else(|| theme.layout.clone());
-    let motion = config.motion.clone().unwrap_or_else(|| theme.motion.clone());
-    let theme = Theme { layout, motion, ..theme };
+    let motion = config
+        .motion
+        .clone()
+        .unwrap_or_else(|| theme.motion.clone());
+    let theme = Theme {
+        layout,
+        motion,
+        ..theme
+    };
 
     let mut rng = opts.seed.unwrap_or_else(|| {
-        let nanos = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(0);
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(0);
         nanos ^ (process::id() as u64)
     });
 
@@ -1910,9 +2219,13 @@ fn main() {
         }
         Some(value) => value.chars().next().unwrap_or('▸'),
     };
-    let title_variant = next_rand(&mut rng) % 2 == 0;
+    let title_variant = next_rand(&mut rng).is_multiple_of(2);
 
-    let data = if opts.demo { demo_data() } else { collect_data(&config) };
+    let data = if opts.demo {
+        demo_data()
+    } else {
+        collect_data(&config)
+    };
 
     let (cols, _, xpixel, ypixel) = term_size();
     let tty = io::stdout().is_terminal();
@@ -1935,7 +2248,8 @@ fn main() {
             } else {
                 0.5
             };
-            let rows = ((cols_for_logo as f64) * cell_ratio * (img_h as f64 / img_w as f64)).ceil() as usize;
+            let rows = ((cols_for_logo as f64) * cell_ratio * (img_h as f64 / img_w as f64)).ceil()
+                as usize;
             Some((path, cols_for_logo, rows.max(3)))
         })
     } else {
@@ -1943,7 +2257,10 @@ fn main() {
     };
 
     let logo_gap = config.logo_gap.unwrap_or(3) as usize;
-    let indent = logo.as_ref().map(|(_, cols_for_logo, _)| cols_for_logo + logo_gap).unwrap_or(0);
+    let indent = logo
+        .as_ref()
+        .map(|(_, cols_for_logo, _)| cols_for_logo + logo_gap)
+        .unwrap_or(0);
     let width = cols.saturating_sub(indent + 1).max(30);
     let lines = render(
         &theme,
@@ -2064,5 +2381,112 @@ mod tests {
     fn truncate_keeps_width() {
         assert_eq!(truncate("abcdef", 4), "abc…");
         assert_eq!(truncate("abc", 4), "abc");
+        assert_eq!(truncate("abc", 0), "");
+    }
+
+    #[test]
+    fn base64_handles_padding() {
+        assert_eq!(b64(b""), "");
+        assert_eq!(b64(b"hi"), "aGk=");
+        assert_eq!(b64(b"hai"), "aGFp");
+    }
+
+    #[test]
+    fn parse_color_accepts_hex_and_rejects_garbage() {
+        assert_eq!(parse_color("#0f10ff"), Some((0x0f, 0x10, 0xff)));
+        assert_eq!(parse_color("#A1B2C3"), Some((0xa1, 0xb2, 0xc3)));
+        assert_eq!(parse_color("a1b2c3"), None);
+        assert_eq!(parse_color("#12345"), None);
+        assert_eq!(parse_color("#1234567"), None);
+        assert_eq!(parse_color("#gggggg"), None);
+    }
+
+    #[test]
+    fn sizes_and_temperatures_format() {
+        assert_eq!(fmt_size(1024 * 1024 * 1024, false), "1 GiB");
+        assert_eq!(fmt_size(1000 * 1000 * 1000, true), "1 GB");
+        assert_eq!(fmt_temp(100, false), "100 °C");
+        assert_eq!(fmt_temp(100, true), "212 °F");
+    }
+
+    #[test]
+    fn ipv4_validation() {
+        assert!(is_ipv4("10.0.0.42"));
+        assert!(is_ipv4("255.255.255.255"));
+        assert!(!is_ipv4("10.0.0"));
+        assert!(!is_ipv4("10.0.0.256"));
+        assert!(!is_ipv4("10.0.0."));
+        assert!(!is_ipv4("fd00::1"));
+    }
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir = env::temp_dir().join(format!("tachyon-test-{}-{}", process::id(), name));
+        fs::create_dir_all(&dir).expect("temp dir");
+        dir
+    }
+
+    #[test]
+    fn config_roundtrip_keeps_colors_and_values() {
+        let dir = temp_dir("roundtrip");
+        let path = dir.join("fetch.conf");
+        let config = Config {
+            enabled: Some(vec!["memory".to_string(), "swap".to_string()]),
+            theme: Some("Rose Pine".to_string()),
+            units: Some("si".to_string()),
+            temp_unit: Some("f".to_string()),
+            memory_warn: Some(77),
+            logo_gap: Some(5),
+            rule: Some("~".to_string()),
+            color_accent: Some((0x6e, 0xe7, 0xff)),
+            color_bg: Some((16, 19, 21)),
+            ..Config::default()
+        };
+        write_config(&path, &config).expect("write");
+        let loaded = load_config(&path);
+        assert_eq!(
+            loaded.enabled.as_deref(),
+            Some(["memory".to_string(), "swap".to_string()].as_slice())
+        );
+        assert_eq!(loaded.theme.as_deref(), Some("Rose Pine"));
+        assert_eq!(loaded.units.as_deref(), Some("si"));
+        assert_eq!(loaded.temp_unit.as_deref(), Some("f"));
+        assert_eq!(loaded.memory_warn, Some(77));
+        assert_eq!(loaded.logo_gap, Some(5));
+        assert_eq!(loaded.rule.as_deref(), Some("~"));
+        assert_eq!(loaded.color_accent, Some((0x6e, 0xe7, 0xff)));
+        assert_eq!(loaded.color_bg, Some((16, 19, 21)));
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn config_skips_comments_and_unknown_keys() {
+        let dir = temp_dir("comments");
+        let path = dir.join("fetch.conf");
+        fs::write(
+            &path,
+            "# leading comment\n   \nenabled = memory\nnonsense = 5\ncolor.fg = #A1B2C3\nunits = si # inline annotations are not stripped\n",
+        )
+        .expect("write");
+        let loaded = load_config(&path);
+        assert_eq!(
+            loaded.enabled.as_deref(),
+            Some(["memory".to_string()].as_slice())
+        );
+        assert_eq!(loaded.color_fg, Some((0xa1, 0xb2, 0xc3)));
+        assert_eq!(loaded.units, None);
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn convert_photo_resizes_and_writes_png() {
+        let dir = temp_dir("convert");
+        let source = dir.join("in.png");
+        let destination = dir.join("out.png");
+        let wide = image::RgbImage::from_fn(2000, 10, |x, _| image::Rgb([x as u8, 40, 90]));
+        wide.save_with_format(&source, image::ImageFormat::Png)
+            .expect("save source");
+        convert_photo(&source, &destination).expect("convert");
+        assert_eq!(png_size(&destination), Some((1600, 8)));
+        fs::remove_dir_all(&dir).ok();
     }
 }
