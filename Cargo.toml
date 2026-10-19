@@ -1,6 +1,6 @@
 [package]
 name = "tachyon-fetch"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 license = "MIT"
 authors = ["Mohamed Salahi"]
@@ -16,6 +16,8 @@ path = "src/main.rs"
 [dependencies]
 libc = "0.2.177"
 image = { version = "0.25.8", default-features = false, features = [ "jpeg", "png" ] }
+ratatui = "0.30.2"
+crossterm = "0.29.0"
 
 [profile.release]
 opt-level = 3
