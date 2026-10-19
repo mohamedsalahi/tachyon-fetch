@@ -178,7 +178,7 @@ struct Opts {
     convert_destination: Option<PathBuf>,
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, PartialEq, Debug)]
 struct Config {
     enabled: Option<Vec<String>>,
     glyph: Option<String>,

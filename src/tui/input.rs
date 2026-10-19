@@ -1,9 +1,13 @@
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::util::adjust;
-use super::{App, ColorEdit, Edit, EditTarget, PAGE_TITLES, RULES};
+use super::{App, ColorEdit, Edit, EditTarget, ResetPrompt, PAGE_TITLES, RULES};
 
 pub fn handle(app: &mut App, key: KeyEvent) -> bool {
+    if app.reset.is_some() {
+        reset_key(app, key);
+        return false;
+    }
     if app.color_edit.is_some() {
         color_key(app, key);
         return false;
@@ -19,13 +23,18 @@ pub fn handle(app: &mut App, key: KeyEvent) -> bool {
 
     match key.code {
         KeyCode::Char('q') => return true,
-        KeyCode::Tab => app.page = (app.page + 1) % PAGE_TITLES.len(),
-        KeyCode::BackTab => app.page = (app.page + PAGE_TITLES.len() - 1) % PAGE_TITLES.len(),
+        KeyCode::Tab | KeyCode::Char('l') | KeyCode::Right => {
+            app.page = (app.page + 1) % PAGE_TITLES.len();
+        }
+        KeyCode::BackTab | KeyCode::Char('h') | KeyCode::Left => {
+            app.page = (app.page + PAGE_TITLES.len() - 1) % PAGE_TITLES.len();
+        }
         KeyCode::Char(value @ '1'..='7') => {
             app.page = value as usize - '1' as usize;
         }
         KeyCode::Char('s') => app.save(),
         KeyCode::Char('r') => app.refresh(),
+        KeyCode::Char('R') => app.reset = Some(ResetPrompt { scope: 0 }),
         KeyCode::Char('j') | KeyCode::Down => {
             if app.page == 5 {
                 app.scroll = app.scroll.saturating_add(1);
@@ -44,11 +53,11 @@ pub fn handle(app: &mut App, key: KeyEvent) -> bool {
         KeyCode::PageUp => app.scroll = app.scroll.saturating_sub(10),
         KeyCode::Char('g') if app.page == 5 => app.scroll = 0,
         KeyCode::Char('G') if app.page == 5 => app.scroll = 999,
-        KeyCode::Right | KeyCode::Char('l') => adjust_value(app, 1),
-        KeyCode::Left | KeyCode::Char('h') => adjust_value(app, -1),
+        KeyCode::Char('+') | KeyCode::Char('=') => adjust_value(app, 1),
+        KeyCode::Char('-') => adjust_value(app, -1),
         KeyCode::Enter => activate(app),
         KeyCode::Char(' ') if app.page == 0 => toggle_module(app),
-        KeyCode::Char('x') => clear_value(app),
+        KeyCode::Char('x') => app.reset_current(),
         KeyCode::Char('a') if app.page == 4 => {
             app.edit = Some(Edit {
                 target: EditTarget::Photo,
@@ -290,24 +299,35 @@ fn activate(app: &mut App) {
     }
 }
 
-fn clear_value(app: &mut App) {
-    match app.page {
-        2 => {
-            let cursor = app.cursors[2];
-            if (2..=9).contains(&cursor) {
-                let index = cursor - 2;
-                app.set_color(index, None);
-                app.dirty = true;
-                app.rebuild_theme();
-            }
+fn reset_key(app: &mut App, key: KeyEvent) {
+    let Some(mut prompt) = app.reset.take() else {
+        return;
+    };
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('q') => {
+            app.status = "reset cancelled".to_string();
+            return;
         }
-        4 if app.cursors[4] == 0 => {
-            app.cfg.image = None;
-            app.dirty = true;
-            app.reload_artwork();
+        KeyCode::Enter => {
+            match prompt.scope {
+                0 => app.reset_current(),
+                1 => app.reset_page(),
+                _ => app.reset_all(),
+            }
+            return;
+        }
+        KeyCode::Char('1') => prompt.scope = 0,
+        KeyCode::Char('2') => prompt.scope = 1,
+        KeyCode::Char('3') => prompt.scope = 2,
+        KeyCode::Char('j') | KeyCode::Down | KeyCode::Char('l') | KeyCode::Right => {
+            prompt.scope = (prompt.scope + 1).min(2);
+        }
+        KeyCode::Char('k') | KeyCode::Up | KeyCode::Char('h') | KeyCode::Left => {
+            prompt.scope = prompt.scope.saturating_sub(1);
         }
         _ => {}
     }
+    app.reset = Some(prompt);
 }
 
 fn copy_palette(app: &mut App) {

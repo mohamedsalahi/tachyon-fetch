@@ -11,6 +11,7 @@ use super::{App, COLOR_NAMES, PAGE_TITLES};
 
 pub fn draw(frame: &mut Frame, app: &mut App) {
     let area = frame.area();
+    app.artwork_pane = None;
     let pal = app.theme.pal;
     let chunks = Layout::vertical([
         Constraint::Length(2),
@@ -48,22 +49,25 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
 
     let dirty = if app.dirty { "*" } else { "" };
     let hints = match app.page {
-        0 => "space toggle · j/k move",
+        0 => "space toggle · j/k move · x restore",
         2 => "enter edit color · p copy palette · x clear",
-        4 => "enter edit path · a add photo · x clear image",
+        4 => "enter edit path · a add photo · x clear",
         5 => "j/k scroll · g top · G bottom",
-        _ => "←/→ adjust · enter act",
+        _ => "-/+ adjust · enter act",
     };
     let status = RLine::from(vec![
         RSpan::styled(" s ", util::fg(pal.accent).add_modifier(Modifier::BOLD)),
         RSpan::styled("save  ", util::fg(pal.dim)),
         RSpan::styled(" r ", util::fg(pal.accent2).add_modifier(Modifier::BOLD)),
         RSpan::styled("refresh  ", util::fg(pal.dim)),
-        RSpan::styled(" tab ", util::fg(pal.accent2).add_modifier(Modifier::BOLD)),
+        RSpan::styled(" h/l ", util::fg(pal.accent2).add_modifier(Modifier::BOLD)),
         RSpan::styled("page  ", util::fg(pal.dim)),
+        RSpan::styled(" R ", util::fg(pal.warn).add_modifier(Modifier::BOLD)),
+        RSpan::styled("reset  ", util::fg(pal.dim)),
         RSpan::styled(" q ", util::fg(pal.err).add_modifier(Modifier::BOLD)),
         RSpan::styled("quit   ", util::fg(pal.dim)),
         RSpan::styled(format!("{} {}", hints, dirty), util::fg(pal.dim)),
+        RSpan::styled(format!("  {}", app.status), util::fg(pal.accent2)),
     ]);
     frame.render_widget(
         Paragraph::new(status).block(Block::default().borders(ratatui::widgets::Borders::TOP)),
@@ -75,6 +79,9 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     }
     if app.color_edit.is_some() {
         color_popup(frame, area, app);
+    }
+    if app.reset.is_some() {
+        reset_popup(frame, area, app);
     }
 }
 
@@ -355,25 +362,30 @@ fn preview(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
         })
     });
     if let Some(art) = body.1 {
-        let note = app
-            .artwork
-            .as_ref()
-            .and_then(|path| {
-                path.file_name()
-                    .map(|name| name.to_string_lossy().to_string())
-            })
-            .unwrap_or_else(|| "no artwork selected".to_string());
-        let hint = if crate::in_kitty() {
-            "kitty image"
+        let block = panel("artwork", app);
+        if app.artwork.is_some() && crate::in_kitty() {
+            frame.render_widget(block, art);
         } else {
-            "image renders in kitty"
-        };
-        let text = Text::from(vec![
-            RLine::from(""),
-            RLine::from(RSpan::styled(format!("  {}", note), util::fg(pal.fg))),
-            RLine::from(RSpan::styled(format!("  {}", hint), util::fg(pal.dim))),
-        ]);
-        frame.render_widget(Paragraph::new(text).block(panel("artwork", app)), art);
+            let note = app
+                .artwork
+                .as_ref()
+                .and_then(|path| {
+                    path.file_name()
+                        .map(|name| name.to_string_lossy().to_string())
+                })
+                .unwrap_or_else(|| "no artwork selected".to_string());
+            let hint = if crate::in_kitty() {
+                "kitty image"
+            } else {
+                "image renders in kitty"
+            };
+            let text = Text::from(vec![
+                RLine::from(""),
+                RLine::from(RSpan::styled(format!("  {}", note), util::fg(pal.fg))),
+                RLine::from(RSpan::styled(format!("  {}", hint), util::fg(pal.dim))),
+            ]);
+            frame.render_widget(Paragraph::new(text).block(block), art);
+        }
     }
     let width = body.0.width.saturating_sub(2) as usize;
     let glyph = app
@@ -426,12 +438,14 @@ fn preview(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
 fn keys(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let pal = app.theme.pal;
     let rows = [
-        ("tab / shift-tab / 1-7", "switch page"),
+        ("h l / ← →", "previous · next page"),
         ("j k / ↑ ↓", "move · preview scroll"),
-        ("h l / ← →", "adjust value"),
+        ("+ -", "adjust value"),
+        ("tab / shift-tab / 1-7", "page jump"),
         ("space", "toggle module"),
         ("enter", "edit · open · apply"),
-        ("x", "clear override"),
+        ("x", "clear the current override"),
+        ("R", "reset: setting · page · config"),
         ("p (palette)", "copy palette into overrides"),
         ("s / r", "save · refresh data"),
         ("q / ctrl-c", "quit"),
@@ -516,6 +530,42 @@ fn color_popup(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     frame.render_widget(
         Paragraph::new(Text::from(lines))
             .block(panel(&format!("color · {}", COLOR_NAMES[edit.row]), app)),
+        popup,
+    );
+}
+
+fn reset_popup(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    let pal = app.theme.pal;
+    let Some(prompt) = &app.reset else {
+        return;
+    };
+    let popup = util::centered(area, 58.min(area.width.saturating_sub(4)), 7);
+    frame.render_widget(Clear, popup);
+    let options = [
+        "reset the current setting",
+        "reset this whole page",
+        "reset the entire config",
+    ];
+    let mut lines = Vec::new();
+    for (index, text) in options.iter().enumerate() {
+        let selected = index == prompt.scope;
+        let style = if selected {
+            util::fg(pal.accent).add_modifier(Modifier::BOLD)
+        } else {
+            util::fg(pal.dim)
+        };
+        let marker = if selected { "▶" } else { " " };
+        lines.push(RLine::from(RSpan::styled(
+            format!(" {} {} ", marker, text),
+            style,
+        )));
+    }
+    lines.push(RLine::from(RSpan::styled(
+        "  j/k choose · 1-3 · enter apply · esc cancel",
+        util::fg(pal.dim),
+    )));
+    frame.render_widget(
+        Paragraph::new(Text::from(lines)).block(panel("reset", app)),
         popup,
     );
 }
