@@ -230,7 +230,7 @@ every   = run          # run · hour · day
 themes  = Solitude,Hackerman,Rose Pine
 ```
 
-Every key above is editable inside `--tui`; the file remains the authority. Glyph keys accept `auto` (the built-in map), `random` (from the pool), `off`, or a single character. `logo_mode = image` uses the kitty graphics protocol; `text` renders the word as braille art. Rotation requires a palette set and an album; an explicit `image` or `theme` wins over rotation for that run. Rotation cursors live in `$XDG_STATE_HOME/tachyon/rotation`, never in the config.
+Fonts are resolved through fontconfig (any installed TTF/OTF family); TTC collections are not rasterized. Rotation applies when the fetch runs — the configurator sets the rules and previews the pinned selection. Every key above is editable inside `--tui`; the file remains the authority. Glyph keys accept `auto` (the built-in map), `random` (from the pool), `off`, or a single character. `logo_mode = image` uses the kitty graphics protocol; `text` renders the word as braille art. Rotation requires a palette set and an album; an explicit `image` or `theme` wins over rotation for that run. Rotation cursors live in `$XDG_STATE_HOME/tachyon/rotation`, never in the config.
 
 | Resource | Default |
 |---|---|
