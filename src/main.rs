@@ -1896,7 +1896,7 @@ fn draw_tui(state: &TuiState, theme: &Theme, path: &Path, width: usize, height: 
     ];
 
     let mut list_header = Line::new();
-    list_header.push(&format!("BAY {}/{}", enabled_count, MODULES.len()), Some(pal.accent2), true);
+    list_header.push(&format!("MODULES {}/{}", enabled_count, MODULES.len()), Some(pal.accent2), true);
     list_header.pad(left_width.saturating_sub(list_header.width));
     list_header.push("   SETTINGS", Some(pal.accent2), true);
     output.push_str(&list_header.text);
