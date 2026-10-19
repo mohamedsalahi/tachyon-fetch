@@ -258,7 +258,30 @@ fn artwork(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 fn preview(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
     let pal = app.theme.pal;
     let chunks = Layout::vertical([Constraint::Min(6), Constraint::Length(3)]).split(area);
-    let width = chunks[0].width.saturating_sub(2) as usize;
+    let body = if chunks[0].width >= 92 {
+        let split = Layout::horizontal([Constraint::Min(50), Constraint::Length(36)]).split(chunks[0]);
+        (split[0], Some(split[1]))
+    } else {
+        (chunks[0], None)
+    };
+    app.artwork_pane = body
+        .1
+        .map(|pane| pane.inner(ratatui::layout::Margin { vertical: 1, horizontal: 1 }));
+    if let Some(art) = body.1 {
+        let note = app
+            .artwork
+            .as_ref()
+            .and_then(|path| path.file_name().map(|name| name.to_string_lossy().to_string()))
+            .unwrap_or_else(|| "no artwork selected".to_string());
+        let hint = if crate::in_kitty() { "kitty image" } else { "image renders in kitty" };
+        let text = Text::from(vec![
+            RLine::from(""),
+            RLine::from(RSpan::styled(format!("  {}", note), util::fg(pal.fg))),
+            RLine::from(RSpan::styled(format!("  {}", hint), util::fg(pal.dim))),
+        ]);
+        frame.render_widget(Paragraph::new(text).block(panel("artwork", app)), art);
+    }
+    let width = body.0.width.saturating_sub(2) as usize;
     let glyph = app
         .cfg
         .glyph
@@ -284,7 +307,7 @@ fn preview(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
     let paragraph = Paragraph::new(Text::from(util::lines(&lines)))
         .block(panel("live readout", app))
         .scroll((app.scroll as u16, 0));
-    frame.render_widget(paragraph, chunks[0]);
+    frame.render_widget(paragraph, body.0);
 
     let graphs = Layout::horizontal([
         Constraint::Percentage(50),

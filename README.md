@@ -160,7 +160,7 @@ s              save                 r       refresh live data
 q / ctrl-c     quit
 ```
 
-The Palette page edits all eight palette slots with an RGB editor and live swatches; Thresholds tunes every warning level against the current reading; Artwork edits the image path, album and placement; Preview renders the real readout with memory and swap sparklines. Every change lands in `fetch.conf` on `s` — the same plain-text file the renderer consumes.
+The Palette page edits all eight palette slots with an RGB editor and live swatches; Thresholds tunes every warning level against the current reading; Artwork edits the image path, album and placement; Preview renders the real readout with memory and swap sparklines **and the actual artwork** through the kitty graphics protocol, so the deck can be finished without leaving the configurator. Every change lands in `fetch.conf` on `s` — the same plain-text file the renderer consumes.
 
 Built on [ratatui](https://ratatui.rs); nothing runs between frames.
 

@@ -239,6 +239,7 @@ fn clear_value(app: &mut App) {
             if app.cursors[4] == 0 {
                 app.cfg.image = None;
                 app.dirty = true;
+                app.reload_artwork();
             }
         }
         _ => {}
@@ -286,6 +287,7 @@ fn cycle_album(app: &mut App, delta: i64) {
     let index = super::util::wrap_index(index, choices.len(), delta) as usize;
     app.cfg.album = if choices[index].is_empty() { None } else { Some(choices[index].clone()) };
     app.dirty = true;
+    app.reload_artwork();
 }
 
 fn color_key(app: &mut App, key: KeyEvent) {
@@ -331,6 +333,7 @@ fn edit_key(app: &mut App, key: KeyEvent) {
             match edit.target {
                 EditTarget::Image => {
                     app.cfg.image = if text.is_empty() { None } else { Some(std::path::PathBuf::from(text)) };
+                    app.reload_artwork();
                 }
                 EditTarget::Glyph => {
                     app.cfg.glyph = text.chars().next().map(|value| value.to_string());

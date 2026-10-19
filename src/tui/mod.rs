@@ -1,5 +1,7 @@
 use std::fs;
 use std::io;
+use std::io::Write;
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use ratatui::backend::CrosstermBackend;
@@ -68,6 +70,10 @@ pub struct App<'a> {
     pub edit: Option<Edit>,
     pub color_edit: Option<ColorEdit>,
     pub scroll: usize,
+    pub artwork: Option<PathBuf>,
+    pub artwork_pane: Option<ratatui::layout::Rect>,
+    placed: Option<(PathBuf, u16, u16)>,
+    rng: u64,
 }
 
 impl<'a> App<'a> {
@@ -82,6 +88,11 @@ impl<'a> App<'a> {
         let data = if demo { crate::demo_data() } else { crate::collect_data(&cfg) };
         let quotes = crate::load_quotes(&crate::quotes_path(opts));
         let quote = quotes.first().cloned().unwrap_or_default();
+        let seed = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_nanos() as u64)
+            .unwrap_or(7)
+            ^ std::process::id() as u64;
         let mut app = Self {
             opts,
             cfg,
@@ -100,6 +111,10 @@ impl<'a> App<'a> {
             edit: None,
             color_edit: None,
             scroll: 0,
+            artwork: None,
+            artwork_pane: None,
+            placed: None,
+            rng: seed,
         };
         app.refresh();
         app
@@ -114,6 +129,11 @@ impl<'a> App<'a> {
             self.history_swap.remove(0);
         }
         self.last_refresh = Instant::now();
+        self.reload_artwork();
+    }
+
+    pub fn reload_artwork(&mut self) {
+        self.artwork = crate::select_logo(self.opts, &self.cfg, &mut self.rng);
     }
 
     pub fn save(&mut self) {
@@ -206,6 +226,14 @@ pub fn run(opts: &Opts, base: &Config) -> io::Result<()> {
             outcome = Err(error);
             break;
         }
+        if let Err(error) = place_artwork(&mut app) {
+            outcome = Err(error);
+            break;
+        }
+        if let Err(error) = terminal.set_cursor_position(ratatui::layout::Position::new(0, 0)) {
+            outcome = Err(error);
+            break;
+        }
         match event::poll(Duration::from_millis(200)) {
             Ok(true) => match event::read() {
                 Ok(Event::Key(key)) => {
@@ -232,8 +260,44 @@ pub fn run(opts: &Opts, base: &Config) -> io::Result<()> {
         }
     }
 
+    if app.placed.is_some() {
+        let mut out = io::stdout();
+        let _ = write!(out, "\x1b_Ga=d,i=4242,q=2;\x1b\\");
+        let _ = out.flush();
+    }
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
     outcome
+}
+
+fn place_artwork(app: &mut App) -> io::Result<()> {
+    let mut out = io::stdout();
+    match app.artwork.clone().zip(app.artwork_pane) {
+        Some((path, area)) if crate::in_kitty() && area.width >= 8 && area.height >= 3 => {
+            let key = (path.clone(), area.width, area.height);
+            if app.placed.as_ref() != Some(&key) {
+                let _ = write!(out, "\x1b_Ga=d,i=4242,q=2;\x1b\\");
+                let encoded = crate::b64(path.to_string_lossy().as_bytes());
+                write!(out, "\x1b_Ga=T,f=100,t=f,i=4242,q=2;{}\x1b\\", encoded)?;
+                app.placed = Some(key);
+                out.flush()?;
+            }
+            write!(out, "\x1b[{};{}H", area.y + 1, area.x + 1)?;
+            write!(
+                out,
+                "\x1b_Ga=p,i=4242,c={},r={},C=1,q=2;\x1b\\",
+                area.width, area.height
+            )?;
+            out.flush()?;
+        }
+        _ => {
+            if app.placed.is_some() {
+                let _ = write!(out, "\x1b_Ga=d,i=4242,q=2;\x1b\\");
+                out.flush()?;
+                app.placed = None;
+            }
+        }
+    }
+    Ok(())
 }
