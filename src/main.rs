@@ -8,7 +8,7 @@ use std::process;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-const VERSION: &str = "0.1.0";
+const VERSION: &str = "0.2.0";
 
 const FALLBACK_QUOTES: &[&str] = &[
     "Precision is a form of mercy.",
