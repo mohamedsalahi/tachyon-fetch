@@ -152,15 +152,16 @@ tachyon --tui
 Seven pages, one engine: **Modules · Appearance · Palette · Thresholds · Artwork · Preview · Keys**.
 
 ```text
-tab / 1-7      switch page          space   toggle module
+h l / ← →      previous · next page space   toggle module
 j k / ↑ ↓      move · scroll        enter   edit · apply
-h l / ← →      adjust value         x       clear override
++ -            adjust value         x       clear the current override
+R              reset (setting · page · config)
 a              add photo            p       copy palette to overrides
 s              save                 r       refresh live data
 q / ctrl-c     quit
 ```
 
-The Palette page edits all eight palette slots with an RGB editor and live swatches; Thresholds tunes every warning level against the current reading; Artwork edits the image path, album and placement; Preview renders the real readout with memory and swap sparklines **and the actual artwork** through the kitty graphics protocol, so the deck can be finished without leaving the configurator. Every change lands in `fetch.conf` on `s` — the same plain-text file the renderer consumes.
+The Palette page edits all eight palette slots with an RGB editor and live swatches; Thresholds tunes every warning level against the current reading; Artwork edits the image path, album and placement; Preview renders the real readout with memory and swap sparklines **and the actual artwork**, scaled to fit the pane through the kitty graphics protocol and removed the moment you leave the page, so the deck can be finished without leaving the configurator. `R` resets the current setting, the whole page, or the entire config after a confirmation; the status line always shows what just happened. Every change lands in `fetch.conf` on `s` — the same plain-text file the renderer consumes.
 
 Built on [ratatui](https://ratatui.rs); nothing runs between frames.
 
