@@ -1,4 +1,3 @@
-use std::fs;
 use std::io;
 use std::io::Write;
 use std::path::PathBuf;
@@ -18,15 +17,30 @@ pub mod input;
 pub mod util;
 pub mod view;
 
-pub const PAGE_TITLES: [&str; 7] = [
+pub const PAGE_TITLES: [&str; 8] = [
     "Modules",
-    "Appearance",
+    "Deck",
+    "Glyphs",
     "Palette",
     "Thresholds",
     "Artwork",
     "Preview",
     "Keys",
 ];
+
+pub const PAGE_MODULES: usize = 0;
+pub const PAGE_DECK: usize = 1;
+pub const PAGE_GLYPHS: usize = 2;
+pub const PAGE_PALETTE: usize = 3;
+pub const PAGE_THRESHOLDS: usize = 4;
+pub const PAGE_ARTWORK: usize = 5;
+pub const PAGE_PREVIEW: usize = 6;
+pub const PAGE_KEYS: usize = 7;
+
+pub const DECK_ROWS: usize = 14;
+pub const GLYPH_FIXED_ROWS: usize = 6;
+pub const PALETTE_ROWS: usize = 13;
+pub const ARTWORK_ROWS: usize = 4;
 
 pub const COLOR_NAMES: [&str; 8] = ["bg", "fg", "dim", "accent", "accent2", "ok", "warn", "err"];
 
@@ -40,14 +54,59 @@ pub struct ColorEdit {
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum EditTarget {
     Image,
-    Glyph,
+    Glyph(usize),
     Rule,
     Photo,
+    LogoText,
+    Pool,
 }
 
 pub struct Edit {
     pub target: EditTarget,
     pub text: String,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum PickerKind {
+    Font,
+    Theme,
+    Album,
+    Photo,
+    ThemeSet,
+}
+
+#[derive(Clone)]
+pub struct PickerItem {
+    pub label: String,
+    pub value: String,
+    pub checked: bool,
+}
+
+pub struct Picker {
+    pub kind: PickerKind,
+    pub title: String,
+    pub items: Vec<PickerItem>,
+    pub filter: String,
+    pub cursor: usize,
+}
+
+impl Picker {
+    pub fn visible(&self) -> Vec<usize> {
+        let needle = self.filter.to_lowercase();
+        self.items
+            .iter()
+            .enumerate()
+            .filter(|(_, item)| needle.is_empty() || item.label.to_lowercase().contains(&needle))
+            .map(|(index, _)| index)
+            .collect()
+    }
+
+    pub fn selected(&self) -> Option<&PickerItem> {
+        let visible = self.visible();
+        visible
+            .get(self.cursor.min(visible.len().saturating_sub(1)))
+            .and_then(|index| self.items.get(*index))
+    }
 }
 
 pub struct App<'a> {
@@ -56,7 +115,7 @@ pub struct App<'a> {
     pub theme: Theme,
     pub palettes: Vec<(String, String, Palette, String, String)>,
     pub page: usize,
-    pub cursors: [usize; 7],
+    pub cursors: [usize; 8],
     pub data: FetchData,
     pub quote: String,
     pub demo: bool,
@@ -67,10 +126,12 @@ pub struct App<'a> {
     pub last_refresh: Instant,
     pub edit: Option<Edit>,
     pub color_edit: Option<ColorEdit>,
+    pub picker: Option<Picker>,
     pub scroll: usize,
     pub artwork: Option<PathBuf>,
     pub artwork_pane: Option<ratatui::layout::Rect>,
     pub reset: Option<ResetPrompt>,
+    pub glyph_seed: u64,
     placed: Option<(PathBuf, u16, u16, u16, u16)>,
     rng: u64,
 }
@@ -83,10 +144,7 @@ impl<'a> App<'a> {
     pub fn new(opts: &'a Opts, base: &Config) -> Self {
         let cfg = base.clone();
         let theme = crate::load_theme(opts, &cfg);
-        let palettes = fs::read_to_string(crate::palettes_path(opts))
-            .ok()
-            .map(|text| text.lines().filter_map(crate::parse_palette_row).collect())
-            .unwrap_or_default();
+        let palettes = crate::palette_rows(opts);
         let demo = opts.demo;
         let data = if demo {
             crate::demo_data()
@@ -106,7 +164,7 @@ impl<'a> App<'a> {
             theme,
             palettes,
             page: 0,
-            cursors: [0; 7],
+            cursors: [0; 8],
             data,
             quote,
             demo,
@@ -117,10 +175,12 @@ impl<'a> App<'a> {
             last_refresh: Instant::now(),
             edit: None,
             color_edit: None,
+            picker: None,
             scroll: 0,
             artwork: None,
             artwork_pane: None,
             reset: None,
+            glyph_seed: seed,
             placed: None,
             rng: seed,
         };
@@ -184,6 +244,33 @@ impl<'a> App<'a> {
         self.cfg.enabled.as_mut().unwrap()
     }
 
+    pub fn module_order(&self) -> Vec<(&'static str, &'static str)> {
+        match &self.cfg.enabled {
+            None => crate::MODULES.to_vec(),
+            Some(list) => {
+                let mut ordered = Vec::new();
+                for id in list {
+                    if let Some(entry) = crate::MODULES.iter().find(|(known, _)| known == id) {
+                        ordered.push(*entry);
+                    }
+                }
+                for entry in crate::MODULES {
+                    if !list.iter().any(|id| id == entry.0) {
+                        ordered.push(*entry);
+                    }
+                }
+                ordered
+            }
+        }
+    }
+
+    pub fn module_enabled(&self, id: &str) -> bool {
+        self.cfg
+            .enabled
+            .as_ref()
+            .is_none_or(|list| list.iter().any(|item| item == id))
+    }
+
     pub fn color(&self, index: usize) -> Option<Rgb> {
         match index {
             0 => self.cfg.color_bg,
@@ -227,12 +314,284 @@ impl<'a> App<'a> {
         crate::list_albums()
     }
 
+    pub fn glyph_row_id(&self, row: usize) -> Option<&'static str> {
+        if row < GLYPH_FIXED_ROWS {
+            None
+        } else {
+            crate::MODULES
+                .get(row - GLYPH_FIXED_ROWS)
+                .map(|(id, _)| *id)
+        }
+    }
+
+    pub fn glyph_label(&self, row: usize) -> &'static str {
+        match row {
+            0 => "header glyph",
+            1 => "system",
+            2 => "core",
+            3 => "power",
+            4 => "row glyphs",
+            5 => "pool",
+            _ => self.glyph_row_id(row).unwrap_or("module"),
+        }
+    }
+
+    pub fn glyph_spec(&self, row: usize) -> String {
+        match row {
+            0 => self
+                .cfg
+                .glyph
+                .clone()
+                .unwrap_or_else(|| "random".to_string()),
+            1 => self.cfg.glyph_system.clone().unwrap_or_default(),
+            2 => self.cfg.glyph_core.clone().unwrap_or_default(),
+            3 => self.cfg.glyph_power.clone().unwrap_or_default(),
+            4 => self.cfg.glyph_row_mode().to_string(),
+            5 => self.cfg.glyph_pool().to_string(),
+            _ => self
+                .glyph_row_id(row)
+                .and_then(|id| self.cfg.glyphs.get(id).cloned())
+                .unwrap_or_else(|| "auto".to_string()),
+        }
+    }
+
+    pub fn glyph_display(&self, row: usize) -> String {
+        match row {
+            0 => match self.cfg.glyph.as_deref() {
+                Some("random") | Some("mixed") | None => {
+                    crate::config::random_glyph(self.cfg.glyph_pool(), self.glyph_seed, "header")
+                        .unwrap_or('▸')
+                        .to_string()
+                }
+                Some(value) => value.chars().next().unwrap_or('▸').to_string(),
+            },
+            1 => crate::config::section_glyph(&self.cfg, "system", self.glyph_seed).to_string(),
+            2 => crate::config::section_glyph(&self.cfg, "core", self.glyph_seed).to_string(),
+            3 => crate::config::section_glyph(&self.cfg, "power", self.glyph_seed).to_string(),
+            4 => match self.cfg.glyph_row_mode() {
+                "auto" => "auto",
+                other => other,
+            }
+            .to_string(),
+            5 => self.cfg.glyph_pool().to_string(),
+            _ => self
+                .glyph_row_id(row)
+                .and_then(|id| crate::config::module_glyph(&self.cfg, id, self.glyph_seed))
+                .map(|glyph| glyph.to_string())
+                .unwrap_or_else(|| "(off)".to_string()),
+        }
+    }
+
+    pub fn set_glyph_spec(&mut self, row: usize, value: &str) -> Result<(), String> {
+        let value = value.trim();
+        if row == 5 {
+            if value.is_empty() {
+                return Err("pool cannot be empty".to_string());
+            }
+            self.cfg.glyph_pool = Some(value.chars().take(64).collect());
+            self.dirty = true;
+            return Ok(());
+        }
+        if row == 4 {
+            let lower = value.to_lowercase();
+            if lower == "auto" {
+                self.cfg.glyph_row = None;
+            } else if matches!(lower.as_str(), "off" | "none" | "random" | "mixed")
+                || value.chars().count() == 1
+            {
+                self.cfg.glyph_row = Some(value.to_string());
+            } else {
+                return Err("auto, off, random or one character".to_string());
+            }
+            self.dirty = true;
+            return Ok(());
+        }
+        let spec = if value.is_empty() {
+            None
+        } else if matches!(value.to_lowercase().as_str(), "random" | "mixed" | "auto") {
+            Some(value.to_lowercase())
+        } else if value.chars().count() == 1 {
+            Some(value.to_string())
+        } else {
+            return Err("one glyph character, random or auto".to_string());
+        };
+        let spec = spec.filter(|value| value != "auto");
+        match row {
+            0 => self.cfg.glyph = spec,
+            1 => self.cfg.glyph_system = spec,
+            2 => self.cfg.glyph_core = spec,
+            3 => self.cfg.glyph_power = spec,
+            _ => {
+                let Some(id) = self.glyph_row_id(row) else {
+                    return Ok(());
+                };
+                match spec {
+                    Some(value) => {
+                        self.cfg.glyphs.insert(id.to_string(), value);
+                    }
+                    None => {
+                        self.cfg.glyphs.remove(id);
+                    }
+                }
+            }
+        }
+        self.dirty = true;
+        Ok(())
+    }
+
+    pub fn cycle_glyph(&mut self, row: usize, delta: i64) {
+        if row == 5 || row == 4 {
+            return;
+        }
+        let pool: Vec<char> = self.cfg.glyph_pool().chars().collect();
+        if pool.is_empty() {
+            return;
+        }
+        let spec = self.glyph_spec(row);
+        let current =
+            if matches!(spec.as_str(), "random" | "auto" | "") || spec.chars().count() != 1 {
+                self.glyph_display(row).chars().next().unwrap_or(pool[0])
+            } else {
+                spec.chars().next().unwrap_or(pool[0])
+            };
+        let index = pool.iter().position(|glyph| *glyph == current).unwrap_or(0);
+        let index = util::wrap_index(index, pool.len(), delta);
+        let _ = self.set_glyph_spec(row, &pool[index].to_string());
+    }
+
+    pub fn toggle_glyph_mode(&mut self, row: usize) {
+        if row == 5 {
+            return;
+        }
+        if row == 4 {
+            let next = if self.cfg.glyph_row_mode() == "off" {
+                "auto"
+            } else {
+                "off"
+            };
+            let _ = self.set_glyph_spec(row, next);
+            return;
+        }
+        let current = self.glyph_spec(row);
+        if matches!(current.as_str(), "random" | "mixed") {
+            let pin = self.glyph_display(row);
+            let _ = self.set_glyph_spec(row, &pin);
+        } else {
+            let _ = self.set_glyph_spec(row, "random");
+        }
+    }
+
+    pub fn open_picker(&mut self, kind: PickerKind) {
+        let (title, items): (String, Vec<PickerItem>) = match kind {
+            PickerKind::Font => {
+                let fonts = crate::font::list_system_fonts();
+                (
+                    format!("font · {} families", fonts.len()),
+                    fonts
+                        .into_iter()
+                        .map(|family| PickerItem {
+                            label: family.clone(),
+                            value: family,
+                            checked: false,
+                        })
+                        .collect(),
+                )
+            }
+            PickerKind::Theme => (
+                "theme".to_string(),
+                self.palette_names()
+                    .into_iter()
+                    .map(|name| PickerItem {
+                        label: name.clone(),
+                        value: name,
+                        checked: false,
+                    })
+                    .collect(),
+            ),
+            PickerKind::Album => {
+                let albums = self.albums();
+                (
+                    format!("album · {}", albums.len()),
+                    albums
+                        .into_iter()
+                        .map(|name| PickerItem {
+                            label: name.clone(),
+                            value: name,
+                            checked: false,
+                        })
+                        .collect(),
+                )
+            }
+            PickerKind::Photo => {
+                let Some(album) = self.cfg.album.clone() else {
+                    self.status = "pick an album first".to_string();
+                    return;
+                };
+                let mut items = vec![PickerItem {
+                    label: format!("↻ rotate the whole album ({})", self.cfg.rotate_art_mode()),
+                    value: "@rotate".to_string(),
+                    checked: false,
+                }];
+                for path in crate::album_images(&album) {
+                    let label = path
+                        .file_name()
+                        .map(|name| name.to_string_lossy().to_string())
+                        .unwrap_or_else(|| path.display().to_string());
+                    items.push(PickerItem {
+                        label,
+                        value: path.display().to_string(),
+                        checked: false,
+                    });
+                }
+                (
+                    format!("album {} · {}", album, items.len().saturating_sub(1)),
+                    items,
+                )
+            }
+            PickerKind::ThemeSet => {
+                let chosen = self.cfg.rotate_themes.clone().unwrap_or_default();
+                (
+                    "rotation set · space marks".to_string(),
+                    self.palette_names()
+                        .into_iter()
+                        .map(|name| {
+                            let checked = chosen.iter().any(|item| item == &name);
+                            PickerItem {
+                                label: name.clone(),
+                                value: name,
+                                checked,
+                            }
+                        })
+                        .collect(),
+                )
+            }
+        };
+        if items.is_empty() {
+            self.status = match kind {
+                PickerKind::Font => "no fonts found (fontconfig missing?)".to_string(),
+                PickerKind::Album => {
+                    "no albums yet — press a on Artwork to add a photo".to_string()
+                }
+                PickerKind::Photo => "album has no images".to_string(),
+                _ => "nothing to choose".to_string(),
+            };
+            return;
+        }
+        self.picker = Some(Picker {
+            kind,
+            title,
+            items,
+            filter: String::new(),
+            cursor: 0,
+        });
+    }
+
     pub fn reset_current(&mut self) {
         let cursor = self.cursors[self.page];
         match self.page {
-            0 => {
-                if let Some(list) = self.cfg.enabled.as_mut() {
-                    let id = crate::MODULES[cursor].0;
+            PAGE_MODULES => {
+                let id = self.module_order().get(cursor).map(|(id, _)| *id);
+                if let (Some(id), Some(list)) = (id, self.cfg.enabled.as_mut()) {
                     list.retain(|item| item != id);
                     if list.is_empty() {
                         self.cfg.enabled = None;
@@ -243,86 +602,133 @@ impl<'a> App<'a> {
                     self.status = "module already at default".to_string();
                 }
             }
-            1 => {
+            PAGE_DECK => {
                 match cursor {
                     0 => self.cfg.layout = None,
-                    1 => self.cfg.glyph = None,
-                    2 => self.cfg.motion = None,
-                    3 => self.cfg.rule = None,
-                    4 => self.cfg.units = None,
-                    _ => self.cfg.temp_unit = None,
+                    1 => self.cfg.motion = None,
+                    2 => self.cfg.rule = None,
+                    3 => self.cfg.units = None,
+                    4 => self.cfg.temp_unit = None,
+                    5 => self.cfg.logo_mode = None,
+                    6 => self.cfg.logo_text = None,
+                    7 => self.cfg.logo_font = None,
+                    8 => self.cfg.logo_size = None,
+                    9 => self.cfg.logo_tint = None,
+                    10 => self.cfg.logo_width = None,
+                    11 => self.cfg.logo_min = None,
+                    12 => self.cfg.logo_max = None,
+                    _ => self.cfg.logo_gap = None,
                 }
                 self.refresh();
                 self.dirty = true;
                 self.status = "setting reset".to_string();
             }
-            2 => {
-                match cursor {
-                    0 => self.cfg.theme = None,
-                    1 => self.cfg.variant = None,
-                    2..=9 => self.set_color(cursor - 2, None),
-                    _ => {
-                        for index in 0..8 {
-                            self.set_color(index, None);
-                        }
+            PAGE_GLYPHS => {
+                let _ = if cursor < 4 {
+                    self.set_glyph_spec(cursor, "")
+                } else if cursor == 4 {
+                    self.cfg.glyph_row = None;
+                    self.dirty = true;
+                    Ok(())
+                } else if cursor == 5 {
+                    self.cfg.glyph_pool = None;
+                    self.dirty = true;
+                    Ok(())
+                } else {
+                    let id = self.glyph_row_id(cursor).unwrap_or("");
+                    self.cfg.glyphs.remove(id);
+                    self.dirty = true;
+                    Ok(())
+                };
+                self.status = "glyph reset".to_string();
+            }
+            PAGE_PALETTE => match cursor {
+                0 => {
+                    self.cfg.theme = None;
+                    self.rebuild_theme();
+                }
+                1 => {
+                    self.cfg.variant = None;
+                    self.rebuild_theme();
+                }
+                2 => self.cfg.rotate_palette = None,
+                3 => self.cfg.rotate_themes = None,
+                4..=11 => self.set_color(cursor - 4, None),
+                _ => {
+                    for index in 0..8 {
+                        self.set_color(index, None);
                     }
                 }
-                self.rebuild_theme();
-                self.dirty = true;
-                self.status = "setting reset".to_string();
-            }
-            3 => {
+            },
+            PAGE_THRESHOLDS => match cursor {
+                0 => self.cfg.memory_warn = None,
+                1 => self.cfg.swap_warn = None,
+                2 => self.cfg.disk_warn = None,
+                3 => self.cfg.battery_low = None,
+                4 => self.cfg.temp_warn = None,
+                5 => self.cfg.temp_crit = None,
+                _ => self.cfg.gpu_warn = None,
+            },
+            PAGE_ARTWORK => {
                 match cursor {
-                    0 => self.cfg.memory_warn = None,
-                    1 => self.cfg.swap_warn = None,
-                    2 => self.cfg.disk_warn = None,
-                    3 => self.cfg.battery_low = None,
-                    4 => self.cfg.temp_warn = None,
-                    5 => self.cfg.temp_crit = None,
-                    _ => self.cfg.gpu_warn = None,
-                }
-                self.dirty = true;
-                self.status = "setting reset".to_string();
-            }
-            4 => {
-                match cursor {
-                    0 => self.cfg.image = None,
-                    1 => self.cfg.album = None,
-                    2 => self.cfg.logo_width = None,
-                    3 => self.cfg.logo_min = None,
-                    4 => self.cfg.logo_max = None,
-                    5 => self.cfg.logo_gap = None,
-                    _ => {}
+                    0 => self.cfg.album = None,
+                    1 => self.cfg.image = None,
+                    2 => self.cfg.rotate_art = None,
+                    _ => self.cfg.rotate_every = None,
                 }
                 self.reload_artwork();
-                self.dirty = true;
-                self.status = "setting reset".to_string();
             }
-            _ => self.status = "nothing to reset here".to_string(),
+            _ => {
+                self.status = "nothing to reset here".to_string();
+                return;
+            }
+        }
+        self.dirty = true;
+        if self.page != PAGE_DECK && self.page != PAGE_GLYPHS {
+            self.status = "setting reset".to_string();
         }
     }
 
     pub fn reset_page(&mut self) {
         match self.page {
-            0 => self.cfg.enabled = None,
-            1 => {
+            PAGE_MODULES => self.cfg.enabled = None,
+            PAGE_DECK => {
                 self.cfg.layout = None;
-                self.cfg.glyph = None;
                 self.cfg.motion = None;
                 self.cfg.rule = None;
                 self.cfg.units = None;
                 self.cfg.temp_unit = None;
+                self.cfg.logo_mode = None;
+                self.cfg.logo_text = None;
+                self.cfg.logo_font = None;
+                self.cfg.logo_size = None;
+                self.cfg.logo_tint = None;
+                self.cfg.logo_width = None;
+                self.cfg.logo_min = None;
+                self.cfg.logo_max = None;
+                self.cfg.logo_gap = None;
                 self.refresh();
             }
-            2 => {
+            PAGE_GLYPHS => {
+                self.cfg.glyph = None;
+                self.cfg.glyph_system = None;
+                self.cfg.glyph_core = None;
+                self.cfg.glyph_power = None;
+                self.cfg.glyph_row = None;
+                self.cfg.glyph_pool = None;
+                self.cfg.glyphs.clear();
+            }
+            PAGE_PALETTE => {
                 self.cfg.theme = None;
                 self.cfg.variant = None;
+                self.cfg.rotate_palette = None;
+                self.cfg.rotate_themes = None;
                 for index in 0..8 {
                     self.set_color(index, None);
                 }
                 self.rebuild_theme();
             }
-            3 => {
+            PAGE_THRESHOLDS => {
                 self.cfg.memory_warn = None;
                 self.cfg.swap_warn = None;
                 self.cfg.disk_warn = None;
@@ -331,13 +737,11 @@ impl<'a> App<'a> {
                 self.cfg.temp_crit = None;
                 self.cfg.gpu_warn = None;
             }
-            4 => {
-                self.cfg.image = None;
+            PAGE_ARTWORK => {
                 self.cfg.album = None;
-                self.cfg.logo_width = None;
-                self.cfg.logo_min = None;
-                self.cfg.logo_max = None;
-                self.cfg.logo_gap = None;
+                self.cfg.image = None;
+                self.cfg.rotate_art = None;
+                self.cfg.rotate_every = None;
                 self.reload_artwork();
             }
             _ => {
@@ -355,6 +759,15 @@ impl<'a> App<'a> {
         self.refresh();
         self.dirty = true;
         self.status = "config reset to defaults".to_string();
+    }
+
+    pub fn logo_cap(&self, cols: usize) -> usize {
+        let width_pct = self.cfg.logo_width.unwrap_or(34) as f64 / 100.0;
+        let cap = ((cols as f64) * width_pct).round() as usize;
+        cap.clamp(
+            self.cfg.logo_min.unwrap_or(26) as usize,
+            self.cfg.logo_max.unwrap_or(46) as usize,
+        )
     }
 }
 
@@ -419,7 +832,7 @@ pub fn run(opts: &Opts, base: &Config) -> io::Result<()> {
 }
 
 fn place_artwork(app: &mut App, kitty: bool, out: &mut impl Write) -> io::Result<()> {
-    let target = if kitty {
+    let target = if kitty && app.cfg.logo_mode() != "text" {
         app.artwork.clone().zip(app.artwork_pane)
     } else {
         None
@@ -477,6 +890,7 @@ fn fit_artwork(path: &std::path::Path, area: ratatui::layout::Rect) -> (u16, u16
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     fn demo_opts() -> Opts {
         Opts {
@@ -509,14 +923,14 @@ mod tests {
         let mut app = App::new(&opts, &Config::default());
         let mut terminal =
             ratatui::Terminal::new(ratatui::backend::TestBackend::new(150, 40)).expect("terminal");
-        app.page = 5;
+        app.page = PAGE_PREVIEW;
         terminal
             .draw(|frame| view::draw(frame, &mut app))
             .expect("draw");
         let pane = app.artwork_pane.expect("pane on preview");
         assert!(pane.width >= 8 && pane.height >= 3);
         assert!(pane.right() <= 150 && pane.bottom() <= 40);
-        app.page = 0;
+        app.page = PAGE_MODULES;
         terminal
             .draw(|frame| view::draw(frame, &mut app))
             .expect("draw");
@@ -553,6 +967,18 @@ mod tests {
     }
 
     #[test]
+    fn text_mode_never_places_an_image() {
+        let opts = demo_opts();
+        let mut app = App::new(&opts, &Config::default());
+        app.cfg.logo_mode = Some("text".to_string());
+        app.artwork = Some(fake_png("text.png"));
+        app.artwork_pane = Some(ratatui::layout::Rect::new(115, 3, 34, 31));
+        let mut out = Vec::new();
+        place_artwork(&mut app, true, &mut out).expect("place");
+        assert!(out.is_empty());
+    }
+
+    #[test]
     fn reset_clears_the_current_setting() {
         let base = Config {
             memory_warn: Some(50),
@@ -562,13 +988,12 @@ mod tests {
         };
         let opts = demo_opts();
         let mut app = App::new(&opts, &base);
-        app.page = 3;
-        app.cursors[3] = 0;
+        app.page = PAGE_THRESHOLDS;
         app.reset_current();
         assert_eq!(app.cfg.memory_warn, None);
         assert_eq!(app.cfg.theme.as_deref(), Some("Rose Pine"));
-        app.page = 2;
-        app.cursors[2] = 2;
+        app.page = PAGE_PALETTE;
+        app.cursors[PAGE_PALETTE] = 4;
         app.reset_current();
         assert_eq!(app.cfg.color_bg, None);
     }
@@ -583,12 +1008,85 @@ mod tests {
         };
         let opts = demo_opts();
         let mut app = App::new(&opts, &base);
-        app.page = 3;
+        app.page = PAGE_THRESHOLDS;
         app.reset_page();
         assert_eq!(app.cfg.memory_warn, None);
         assert_eq!(app.cfg.swap_warn, None);
         assert!(app.cfg.image.is_some());
         app.reset_all();
         assert_eq!(app.cfg, Config::default());
+    }
+
+    #[test]
+    fn glyph_editing_pins_and_randomizes() {
+        let opts = demo_opts();
+        let mut app = App::new(&opts, &Config::default());
+        let row = GLYPH_FIXED_ROWS
+            + crate::MODULES
+                .iter()
+                .position(|(id, _)| *id == "memory")
+                .unwrap();
+        app.toggle_glyph_mode(row);
+        assert_eq!(
+            app.cfg.glyphs.get("memory").map(String::as_str),
+            Some("random")
+        );
+        app.toggle_glyph_mode(row);
+        let pinned = app.cfg.glyphs.get("memory").cloned().unwrap();
+        assert_ne!(pinned, "random");
+        assert_eq!(pinned.chars().count(), 1);
+        app.set_glyph_spec(row, "◆").unwrap();
+        assert_eq!(app.cfg.glyphs.get("memory").map(String::as_str), Some("◆"));
+        app.set_glyph_spec(row, "two").unwrap_err();
+        app.page = PAGE_GLYPHS;
+        app.cursors[PAGE_GLYPHS] = row;
+        app.reset_current();
+        assert!(!app.cfg.glyphs.contains_key("memory"));
+    }
+
+    #[test]
+    fn module_order_follows_the_enabled_list() {
+        let opts = demo_opts();
+        let mut app = App::new(&opts, &Config::default());
+        app.cfg.enabled = Some(vec!["memory".to_string(), "os".to_string()]);
+        let order = app.module_order();
+        assert_eq!(order[0].0, "memory");
+        assert_eq!(order[1].0, "os");
+        assert_eq!(order.len(), crate::MODULES.len());
+    }
+
+    #[test]
+    fn picker_filters_and_selects() {
+        let opts = demo_opts();
+        let mut app = App::new(&opts, &Config::default());
+        app.picker = Some(Picker {
+            kind: PickerKind::Font,
+            title: "test".to_string(),
+            items: vec![
+                PickerItem {
+                    label: "DejaVu Sans".to_string(),
+                    value: "DejaVu Sans".to_string(),
+                    checked: false,
+                },
+                PickerItem {
+                    label: "Hack".to_string(),
+                    value: "Hack".to_string(),
+                    checked: false,
+                },
+            ],
+            filter: "deja".to_string(),
+            cursor: 0,
+        });
+        assert_eq!(app.picker.as_ref().unwrap().visible(), vec![0]);
+        app.picker.as_mut().unwrap().filter.clear();
+        app.picker.as_mut().unwrap().cursor = 1;
+        assert_eq!(
+            app.picker
+                .as_ref()
+                .unwrap()
+                .selected()
+                .map(|item| item.value.clone()),
+            Some("Hack".to_string())
+        );
     }
 }

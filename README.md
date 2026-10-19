@@ -13,7 +13,7 @@
 </p>
 <p>
   <img alt="No runtime tooling" src="https://img.shields.io/badge/RUNTIME_TOOLING-0-6ee7ff?style=for-the-badge&labelColor=1b1f27">
-  <img alt="Release binary" src="https://img.shields.io/badge/BINARY-1.6_MB-8957e5?style=for-the-badge&labelColor=1b1f27">
+  <img alt="Release binary" src="https://img.shields.io/badge/BINARY-1.9_MB-8957e5?style=for-the-badge&labelColor=1b1f27">
   <img alt="Kitty graphics" src="https://img.shields.io/badge/KITTY-GRAPHICS-f778ba?style=for-the-badge&labelColor=1b1f27">
   <img alt="Built-in TUI" src="https://img.shields.io/badge/TUI-BUILT_IN-39c5cf?style=for-the-badge&labelColor=1b1f27">
   <img alt="Powered by ratatui" src="https://img.shields.io/badge/POWERED_BY-RATATUI-ffb86b?style=for-the-badge&labelColor=1b1f27">
@@ -43,10 +43,13 @@ It is designed for people who want the truth about their systems at a glance —
 | **One process** | every value is collected in-process; no forks, no pipelines |
 | **HUD layout** | two-column flight-deck composition with a `stack` fallback for narrow terms |
 | **Reveal motion** | a short staged entrance, or silence with `--static` |
-| **Configurator** | `--tui` pages for modules, appearance, palette, thresholds and artwork, with a live preview |
-| **Palette engine** | reads a TSV palette table and the active theme state; built-in Solitude fallback |
-| **Artwork** | kitty graphics protocol with placement that never reflows text |
-| **Album rotation** | `$XDG_DATA_HOME/tachyon/albums/<name>/*.png`, picked deterministically with `--seed` |
+| **Configurator** | `--tui` pages for modules, deck, glyphs, palette, thresholds, artwork and more, with a live preview |
+| **Palette engine** | six built-in themes (Solitude, Vantablack, Hackerman, Retro 82, Rose Pine, Flexoki Light) plus a TSV table and the active theme state |
+| **Text logo** | any system font rendered as braille art with a two-tone tint — no image protocol needed |
+| **Image logo** | kitty graphics protocol with placement that never reflows text |
+| **Glyph system** | one mapped glyph for every fetched object; pin it, randomize it, or draw it from a custom pool; per-section glyphs too |
+| **Rotation** | artwork and palette rotation with `off · next · shuffle`, a chosen theme set, and `run · hour · day` cadence |
+| **Album flow** | `$XDG_DATA_HOME/tachyon/albums/<name>/*.png`, browsed album-first in the configurator |
 | **Image ingest** | JPEG/PNG conversion inside the binary — no ImageMagick, no shell |
 | **Threshold colour** | capture warns once a metric actually means something |
 | **Graceful absence** | no GPU, no battery, no hwmon, no NVML, no palette: the frame still renders |
@@ -125,9 +128,9 @@ NOTE  Simplify until it hurts, then stop.
 | `--tui` | open the module and appearance configurator |
 | `--plain` | no colour, no image |
 | `--static` | disable the reveal animation |
-| `--no-logo` | skip the kitty image |
+| `--no-logo` | skip the logo |
 | `--layout <hud\|stack>` | choose the composition |
-| `--glyph <char\|random>` | section marker |
+| `--glyph <char\|random>` | header glyph |
 | `--album <name>` | pull artwork from an album |
 | `--theme <name>` | override the active palette |
 | `--variant <dark\|light>` | force the palette variant |
@@ -137,7 +140,8 @@ NOTE  Simplify until it hurts, then stop.
 | `--quotes <path>` | alternate note pool |
 | `--config <path>` | alternate module/appearance config |
 | `--state <path>` | alternate theme state file |
-| `--list-themes` | print the palette table |
+| `--list-themes` | print the built-in and installed palettes |
+| `--fonts` | list system font families (fontconfig) |
 | `--convert <src> <dst>` | convert an image to PNG (used by album ingest) |
 | `-h`, `-V` | help and version |
 
@@ -149,19 +153,21 @@ NOTE  Simplify until it hurts, then stop.
 tachyon --tui
 ```
 
-Seven pages, one engine: **Modules · Appearance · Palette · Thresholds · Artwork · Preview · Keys**.
+Eight pages, one engine: **Modules · Deck · Glyphs · Palette · Thresholds · Artwork · Preview · Keys**.
 
 ```text
-h l / ← →      previous · next page space   toggle module
-j k / ↑ ↓      move · scroll        enter   edit · apply
-+ -            adjust value         x       clear the current override
+h l / ← →      previous · next page space   toggle · pin/random · mark
+j k / ↑ ↓      move · scroll        enter   edit · open picker · apply
++ -            adjust · cycle glyph J K     reorder the enabled modules
 R              reset (setting · page · config)
-a              add photo            p       copy palette to overrides
-s              save                 r       refresh live data
+a              add photo            p       pin glyph · copy palette
+s              save                 r       randomize glyphs · refresh
 q / ctrl-c     quit
 ```
 
-The Palette page edits all eight palette slots with an RGB editor and live swatches; Thresholds tunes every warning level against the current reading; Artwork edits the image path, album and placement; Preview renders the real readout with memory and swap sparklines **and the actual artwork**, scaled to fit the pane through the kitty graphics protocol and removed the moment you leave the page, so the deck can be finished without leaving the configurator. `R` resets the current setting, the whole page, or the entire config after a confirmation; the status line always shows what just happened. Every change lands in `fetch.conf` on `s` — the same plain-text file the renderer consumes.
+The configurator is the whole config surface, not a subset. **Deck** edits composition, units, temperature, the logo mode, the logo text, and a font picker that lists every family fontconfig knows and renders the result live. **Glyphs** maps every fetched object individually, with pinned, random and auto modes, a custom pool, and per-section overrides. **Palette** picks from the built-in theme set or any installed palette table, edits RGB channels, and defines the rotation set. **Artwork** is album-first: choose an album, then choose a frame to pin or rotate through the whole album; rotation mode and cadence are editable in place. **Preview** renders the real readout, including the actual text logo, composed exactly as the fetch will print it. `R` resets the current setting, the whole page, or the entire config after confirmation. Comments and unknown keys in `fetch.conf` survive every save. Every change lands in `fetch.conf` on `s` — the same plain-text file the renderer consumes.
+
+Pickers are filter-first: type to narrow, `↑`/`↓` to move, `enter` to take, `esc` to cancel. In the theme-set picker, `space` marks a theme and advances.
 
 Built on [ratatui](https://ratatui.rs); nothing runs between frames.
 
@@ -175,15 +181,22 @@ Built on [ratatui](https://ratatui.rs); nothing runs between frames.
 # only these modules render; omit the line for all of them
 enabled = os,host,kernel,uptime,session,cpu,memory,swap,disk_root,disk_media,gpu_util,gpu_vram,battery,cpu_temp,gpu_temp
 
-glyph  = ◆
+glyph  = ◆            # header glyph; random, or one character
 layout = hud
 motion = reveal
 theme  = Rose Pine
 rule   = ─
 units  = binary
 temp   = c
-image  = /home/you/Pictures/board.png
-album  = night
+
+# logo: image protocol or a text logo rendered in any system font
+logo_mode = text
+logo_text = TACHYON
+logo_font = JetBrainsMono Nerd Font
+logo_size = 110
+logo_tint = duo
+image     = /home/you/Pictures/board.png
+album     = night
 
 memory_warn = 85
 swap_warn   = 50
@@ -199,7 +212,25 @@ logo_max   = 46
 logo_gap   = 3
 
 color.accent = #6ee7ff
+
+[glyphs]
+row    = auto          # auto · off · random · one character
+pool   = ▸▚◆▰⬢⬡■●
+system = ◆
+core   = ◆
+power  = ◆
+memory = ⬢             # pinned
+swap   = random        # drawn from the pool per run
+disk_root = auto       # the built-in map for this object
+
+[rotate]
+art     = next         # off · next · shuffle
+palette = next
+every   = run          # run · hour · day
+themes  = Solitude,Hackerman,Rose Pine
 ```
+
+Every key above is editable inside `--tui`; the file remains the authority. Glyph keys accept `auto` (the built-in map), `random` (from the pool), `off`, or a single character. `logo_mode = image` uses the kitty graphics protocol; `text` renders the word as braille art. Rotation requires a palette set and an album; an explicit `image` or `theme` wins over rotation for that run. Rotation cursors live in `$XDG_STATE_HOME/tachyon/rotation`, never in the config.
 
 | Resource | Default |
 |---|---|
@@ -220,7 +251,7 @@ A palette row is twelve tab-separated fields:
 name  variant  bg  fg  dim  accent  accent2  ok  warn  error  layout  motion
 ```
 
-If no palette table is present, Tachyon falls back to its own Solitude palette. An active Omarchy theme state is honoured when available.
+The six built-in themes are always available; a palette table (for example, one generated by a NixOS/Home Manager theme module) extends them and overrides rows with the same name and variant. An active Omarchy theme state is honoured when available.
 
 <br>
 
@@ -243,6 +274,7 @@ If no palette table is present, Tachyon falls back to its own Solitude palette. 
 - **NVML on demand.** The library is opened with `dlopen`; if the driver or the symbol is absent, GPU telemetry silently degrades.
 - **One write.** The frame is composed in memory and emitted once, so a slow terminal never tears the layout.
 - **One engine.** The configurator preview renders through the same layout code as the CLI.
+- **Text logos locally.** Fonts are rasterized in-process with `fontdue`; fontconfig is only consulted when you open the picker or resolve a family.
 - **Contained unsafe.** `unsafe` is limited to the NVML ABI, termios and the terminal bindings.
 - **Nothing persistent except intent.** Renders do not write state; only an explicit configurator save does.
 - **No network.** Ever.

@@ -146,7 +146,81 @@ fn list_themes_reads_palette_table() {
         &root,
         &["--list-themes", "--palettes", table.to_str().unwrap()],
     ));
-    assert_eq!(output, "Alpha\nZulu\n");
+    let mut names: Vec<&str> = output.lines().collect();
+    names.sort();
+    let mut expected = vec![
+        "Alpha",
+        "Flexoki Light",
+        "Hackerman",
+        "Retro 82",
+        "Rose Pine",
+        "Solitude",
+        "Vantablack",
+        "Zulu",
+    ];
+    expected.sort();
+    assert_eq!(names, expected);
+}
+
+#[test]
+fn font_listing_succeeds_without_fontconfig() {
+    let root = sandbox("fonts");
+    let output = run(&root, &["--fonts"]);
+    assert!(output.status.success());
+    assert!(stderr(&output).is_empty());
+}
+
+fn fake_album(root: &Path) {
+    let dir = root.join("albums/night");
+    fs::create_dir_all(&dir).expect("album dir");
+    for name in ["a.png", "b.png"] {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"\x89PNG\r\n\x1a\n");
+        bytes.extend_from_slice(&[0, 0, 0, 13]);
+        bytes.extend_from_slice(b"IHDR");
+        bytes.extend_from_slice(&8u32.to_be_bytes());
+        bytes.extend_from_slice(&8u32.to_be_bytes());
+        fs::write(dir.join(name), bytes).expect("png");
+    }
+}
+
+#[test]
+fn rotation_advances_across_runs() {
+    let root = sandbox("rotate");
+    fake_album(&root);
+    let config = root.join("config/tachyon/fetch.conf");
+    fs::create_dir_all(config.parent().unwrap()).expect("config dir");
+    fs::write(
+        &config,
+        "album = night\n\
+         [rotate]\n\
+         art = next\n\
+         palette = next\n\
+         every = run\n\
+         themes = Solitude,Hackerman\n",
+    )
+    .expect("config");
+    let albums = (
+        "TACHYON_FETCH_ALBUMS",
+        root.join("albums").display().to_string(),
+    );
+    let state = root.join("state/tachyon/rotation");
+    let mut seen = Vec::new();
+    for _ in 0..3 {
+        let output = run_env(
+            &root,
+            &["--demo", "--plain", "--static", "--no-logo"],
+            std::slice::from_ref(&albums),
+        );
+        assert!(output.status.success());
+        let text = stdout(&output);
+        seen.push(if text.contains("SOLITUDE") { 0 } else { 1 });
+        assert!(text.contains("SOLITUDE") || text.contains("HACKERMAN"));
+    }
+    assert_eq!(seen, vec![0, 1, 0]);
+    let state_text = fs::read_to_string(&state).expect("rotation state");
+    assert!(state_text.contains("art = 0"), "{}", state_text);
+    assert!(state_text.contains("stamp = "), "{}", state_text);
 }
 
 #[test]
