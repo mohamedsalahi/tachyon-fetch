@@ -209,6 +209,8 @@ color.accent = #6ee7ff
 | logo | `$XDG_DATA_HOME/tachyon/logo.png` |
 | albums | `$XDG_DATA_HOME/tachyon/albums` |
 
+Lines are `key = value` pairs; a line whose first non-space character is `#` is a comment. Inline annotations after a value are not stripped, so keep comments on their own lines.
+
 Environment overrides: `TACHYON_FETCH_CONFIG`, `TACHYON_FETCH_PALETTES`, `TACHYON_FETCH_QUOTES`, `TACHYON_FETCH_STATE`, `TACHYON_FETCH_LOGO`, `TACHYON_FETCH_ALBUMS`.
 
 A palette row is twelve tab-separated fields:
