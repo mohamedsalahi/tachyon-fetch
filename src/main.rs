@@ -1910,7 +1910,7 @@ fn draw_tui(state: &TuiState, theme: &Theme, path: &Path, width: usize, height: 
             let enabled = state.enabled[module_index];
             let selected = module_index == state.cursor;
             line.push(if selected { "▸ " } else { "  " }, Some(pal.accent), true);
-            line.push(if enabled { "[+] " } else { "[ ] " }, Some(if enabled { pal.accent } else { pal.dim }), true);
+            line.push(if enabled { "[x] " } else { "[ ] " }, Some(if enabled { pal.accent } else { pal.dim }), true);
             line.push(label, Some(if enabled { pal.fg } else { pal.dim }), false);
         }
         line.pad(left_width.saturating_sub(line.width));
