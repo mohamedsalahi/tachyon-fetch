@@ -9,7 +9,7 @@ license=('MIT')
 depends=('gcc-libs' 'fontconfig')
 makedepends=('cargo' 'rust')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('9ac4c3269103b91e872a6ee91623a3ed676fa060e3e6840359abc353926cd821')
+sha256sums=('b0f53b9b0947f5d96bfbb31c8ab241db251fe35830e921be52d2260a0f69b502')
 
 build() {
   cd "$pkgname-$pkgver"
