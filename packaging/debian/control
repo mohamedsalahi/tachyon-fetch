@@ -1,0 +1,17 @@
+Source: tachyon-fetch
+Section: utils
+Priority: optional
+Maintainer: Mohamed Salahi <264395179+mohamedsalahi@users.noreply.github.com>
+Build-Depends: debhelper-compat (= 13), cargo, rustc (>= 1.88)
+Standards-Version: 4.7.0
+Rules-Requires-Root: no
+Homepage: https://github.com/mohamedsalahi/tachyon-fetch
+
+Package: tachyon-fetch
+Architecture: any
+Depends: ${misc:Depends}, fontconfig
+Description: Cockpit-grade system fetch with a configurator and distro logos
+ A single-process system fetch that reads /proc, /sys, DMI and hwmon,
+ renders one composed frame, and ships a built-in configurator. ASCII
+ distro logos, a system-font text logo and kitty graphics artwork are
+ supported.

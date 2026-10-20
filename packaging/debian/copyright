@@ -1,0 +1,12 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: tachyon-fetch
+Source: https://github.com/mohamedsalahi/tachyon-fetch
+
+Files: *
+Copyright: 2026 Mohamed Salahi
+License: MIT
+
+Files: logos/*
+Copyright: 2021-2026 fastfetch contributors
+License: MIT
+Comment: See logos/NOTICE.md and logos/LICENSE-fastfetch.
