@@ -26,7 +26,7 @@ supported.
 %cargo_build
 
 %install
-%cargo_install
+install -Dm755 target/rpm/tachyon %{buildroot}%{_bindir}/tachyon
 
 %files
 %{_bindir}/tachyon
