@@ -6,7 +6,7 @@ tarball: `v0.7.0`, sha256 `aaafdc2804a28da836758fdab3a99cab9514d474261c2e4fc3e45
 
 | Priority | Target | Package manager | Staged file | Status |
 |---|---|---|---|---|
-| 1 | NixOS | nix | flake outputs + `../nixpkgs-submission/` | flake builds and tests pass; nixpkgs PR pending |
+| 1 | NixOS | nix | `default.nix` (+ external nixpkgs submission) | `nix-build` + CI pass; nixpkgs PR pending |
 | 2 | Arch Linux | pacman | `arch/PKGBUILD` | source build in CI; `makepkg` pending |
 | 3 | Fedora | dnf | `fedora/tachyon-fetch.spec` | source build in CI; `fedpkg`/COPR pending |
 | 4 | Ubuntu, Mint | apt | `debian/` | source build + `.deb` in CI; `dpkg-buildpackage` pending |
@@ -42,8 +42,8 @@ target package tooling.
 
 ## Publish routes
 
-- **NixOS**: `nix build .#tachyon-fetch` from this flake; upstream entry in
-  `nixpkgs-submission/by-name/ta/tachyon-fetch/`. The nixpkgs PR is not open.
+- **NixOS**: `nix-build default.nix` from this checkout. The upstream entry
+  lives in the external nixpkgs submission; the nixpkgs PR is not open.
 - **Arch**: create an AUR package from `arch/PKGBUILD` and regenerate
   `.SRCINFO` with `makepkg --printsrcinfo > .SRCINFO`. The binary needs
   `fontconfig` at runtime.
