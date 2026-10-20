@@ -302,7 +302,7 @@ fn pin_glyph(app: &mut App) {
     }
 }
 
-fn cycle_choice(field: &mut Option<String>, values: &[&str], current: &str, delta: i64) {
+pub(crate) fn cycle_choice(field: &mut Option<String>, values: &[&str], current: &str, delta: i64) {
     let index = values
         .iter()
         .position(|value| *value == current)
@@ -355,7 +355,12 @@ fn adjust_value(app: &mut App, delta: i64) {
                 }
                 5 => {
                     let current = app.cfg.logo_mode().to_string();
-                    cycle_choice(&mut app.cfg.logo_mode, &["image", "text"], &current, delta);
+                    cycle_choice(
+                        &mut app.cfg.logo_mode,
+                        &["image", "text", "ascii"],
+                        &current,
+                        delta,
+                    );
                     app.reload_artwork();
                     app.status = format!("logo mode {}", app.cfg.logo_mode());
                 }
@@ -393,6 +398,9 @@ fn adjust_value(app: &mut App, delta: i64) {
                 }
                 14 => app.cycle_note_mode(delta),
                 15 => app.cycle_note_content(delta),
+                16 => app.cycle_logo_side(),
+                17 => app.cycle_logo_art(delta),
+                18 => app.cycle_logo_color(),
                 _ => {}
             }
         }
@@ -496,6 +504,7 @@ fn activate(app: &mut App) {
             7 => app.open_picker(PickerKind::Font),
             14 => app.open_picker(PickerKind::NoteMode),
             15 => app.open_note_content(),
+            17 => app.open_picker(PickerKind::Art),
             _ => adjust_value(app, 1),
         },
         PAGE_GLYPHS => {
@@ -729,6 +738,15 @@ fn select_picker(app: &mut App, picker: &mut super::Picker) -> bool {
                     app.refresh_note();
                     app.dirty = true;
                     app.status = format!("note mode {}", item.value);
+                }
+                PickerKind::Art => {
+                    app.cfg.logo_art = (item.value != "@auto").then(|| item.value.clone());
+                    app.dirty = true;
+                    app.status = if item.value == "@auto" {
+                        format!("ascii art auto · {}", crate::ascii::detect(app.demo))
+                    } else {
+                        format!("ascii art {}", item.value)
+                    };
                 }
                 PickerKind::Emoticon => {
                     if item.value == "@custom" {

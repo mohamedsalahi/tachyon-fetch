@@ -7,6 +7,7 @@ use std::process;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+mod ascii;
 mod config;
 mod font;
 mod rotate;
@@ -178,6 +179,7 @@ const FALLBACK_PALETTE: Palette = Palette {
     err: (222, 97, 69),
 };
 
+#[derive(Clone)]
 struct Theme {
     name: String,
     mode: String,
@@ -196,6 +198,7 @@ pub struct Opts {
     version: bool,
     list_themes: bool,
     list_fonts: bool,
+    list_logos: bool,
     tui: bool,
     rotated_art: Option<usize>,
     layout: Option<String>,
@@ -207,6 +210,7 @@ pub struct Opts {
     logo: Option<PathBuf>,
     palettes: Option<PathBuf>,
     quotes: Option<PathBuf>,
+    logos: Option<PathBuf>,
     config: Option<PathBuf>,
     state: Option<PathBuf>,
     convert_source: Option<PathBuf>,
@@ -342,6 +346,10 @@ impl Line {
             self.push_segment(&" ".repeat(n), None, false);
         }
     }
+}
+
+fn logo_side_right(config: &Config) -> bool {
+    config.logo_side() == "right"
 }
 
 fn width_of(text: &str) -> usize {
@@ -2071,6 +2079,7 @@ fn parse_args() -> Opts {
             "-V" | "--version" => opts.version = true,
             "--list-themes" => opts.list_themes = true,
             "--fonts" => opts.list_fonts = true,
+            "--list-logos" => opts.list_logos = true,
             "--tui" => opts.tui = true,
             "--layout" => opts.layout = Some(argument(&mut args, "--layout")),
             "--glyph" => opts.glyph = Some(argument(&mut args, "--glyph")),
@@ -2090,6 +2099,7 @@ fn parse_args() -> Opts {
             "--logo" => opts.logo = Some(PathBuf::from(argument(&mut args, "--logo"))),
             "--palettes" => opts.palettes = Some(PathBuf::from(argument(&mut args, "--palettes"))),
             "--quotes" => opts.quotes = Some(PathBuf::from(argument(&mut args, "--quotes"))),
+            "--logos" => opts.logos = Some(PathBuf::from(argument(&mut args, "--logos"))),
             "--config" => opts.config = Some(PathBuf::from(argument(&mut args, "--config"))),
             "--state" => opts.state = Some(PathBuf::from(argument(&mut args, "--state"))),
             "--convert" => {
@@ -2117,7 +2127,7 @@ fn help() {
          --tui             open the module/layout/album configurator\n\
          --plain           no colours, no image\n\
          --static          disable the reveal animation\n\
-         --no-logo         do not draw the kitty image logo\n\
+         --no-logo         do not draw any logo\n\
          --layout <name>   hud or stack\n\
          --glyph <char>    header glyph (random or a character)\n\
          --album <name>    pick the artwork from an album\n\
@@ -2275,6 +2285,16 @@ fn main() {
         list_fonts();
         return;
     }
+    if opts.list_logos {
+        let mut ids = ascii::ids();
+        ids.extend(ascii::runtime_ids(&ascii::logos_dir(&opts)));
+        ids.sort();
+        ids.dedup();
+        for id in ids {
+            println!("{}", id);
+        }
+        return;
+    }
     if let (Some(source), Some(destination)) = (&opts.convert_source, &opts.convert_destination) {
         match convert_photo(source, destination) {
             Ok(()) => return,
@@ -2344,7 +2364,7 @@ fn main() {
         .motion
         .clone()
         .unwrap_or_else(|| theme.motion.clone());
-    let theme = Theme {
+    let mut theme = Theme {
         layout,
         motion,
         ..theme
@@ -2381,6 +2401,53 @@ fn main() {
             config.logo_max.unwrap_or(46) as usize,
         )
     };
+    let logos_dir = ascii::logos_dir(&opts);
+    let ascii_id = config
+        .logo_art
+        .clone()
+        .unwrap_or_else(|| ascii::detect(opts.demo));
+    let wants_ascii = config.logo_mode() == "ascii"
+        && tty
+        && !opts.plain
+        && !opts.no_logo
+        && theme.layout != "stack";
+    let ascii_art = if wants_ascii {
+        let fits = |art: &ascii::LoadedArt| {
+            let width = ascii::width(&art.lines);
+            width > 0 && width + logo_gap + 56 < cols
+        };
+        ascii::load(&ascii_id, &logos_dir, false)
+            .filter(fits)
+            .or_else(|| ascii::load(&ascii_id, &logos_dir, true).filter(fits))
+    } else {
+        None
+    };
+    if let Some(art) = &ascii_art {
+        if config.logo_color() == "derive" {
+            theme.pal = ascii::derive_palette(&art.colors, &theme.pal);
+        }
+    }
+    let ascii_lines = ascii_art.as_ref().map(|art| {
+        let colors = if config.logo_color() == "native" && !art.colors.is_empty() {
+            art.colors.clone()
+        } else {
+            ascii::theme_colors(&theme.pal)
+        };
+        ascii::rendered(art, &colors)
+            .into_iter()
+            .map(|spans| {
+                let mut line = Line::new();
+                for (text, color) in spans {
+                    line.push(&text, Some(color), false);
+                }
+                line
+            })
+            .collect::<Vec<Line>>()
+    });
+    let ascii_width = ascii_art
+        .as_ref()
+        .map(|art| ascii::width(&art.lines))
+        .unwrap_or(0);
     let wants_text = config.logo_mode() == "text"
         && tty
         && !opts.plain
@@ -2392,7 +2459,7 @@ fn main() {
     } else {
         None
     };
-    let logo = if !wants_text
+    let logo = if config.logo_mode() == "image"
         && tty
         && !opts.plain
         && !opts.no_logo
@@ -2419,7 +2486,9 @@ fn main() {
         None
     };
 
-    let indent = if let Some(logo) = &text_logo {
+    let indent = if ascii_width > 0 {
+        ascii_width + logo_gap
+    } else if let Some(logo) = &text_logo {
         logo.width + logo_gap
     } else {
         logo.as_ref()
@@ -2437,10 +2506,22 @@ fn main() {
         opts.demo,
         &config,
     );
-    if let Some(logo) = &text_logo {
-        lines = compose_logo(logo, lines, logo_gap);
+    if let (Some(art_lines), false) = (&ascii_lines, logo_side_right(&config)) {
+        lines = hcat(art_lines, &lines, ascii_width, logo_gap);
+    } else if let (Some(art_lines), true) = (&ascii_lines, logo_side_right(&config)) {
+        lines = hcat(&lines, art_lines, width, logo_gap);
+    } else if let Some(logo) = &text_logo {
+        if logo_side_right(&config) {
+            lines = hcat(&lines, &logo.lines, width, logo_gap);
+        } else {
+            lines = compose_logo(logo, lines, logo_gap);
+        }
     }
-    let print_indent = if text_logo.is_some() { 0 } else { indent };
+    let print_indent = if ascii_lines.is_some() || text_logo.is_some() || logo_side_right(&config) {
+        0
+    } else {
+        indent
+    };
 
     let use_color = !opts.plain
         && env::var_os("NO_COLOR").is_none()
@@ -2452,9 +2533,18 @@ fn main() {
 
     if let Some((path, columns, _)) = &logo {
         let encoded = b64(path.to_string_lossy().as_bytes());
+        let shift = if logo_side_right(&config) {
+            width + logo_gap
+        } else {
+            0
+        };
+        let _ = write!(out, "\x1b[s");
+        if shift > 0 {
+            let _ = write!(out, "\x1b[{}C", shift);
+        }
         let _ = write!(
             out,
-            "\x1b[s\x1b_Ga=T,f=100,t=f,c={},C=1;{}\x1b\\\x1b[u",
+            "\x1b_Ga=T,f=100,t=f,c={},C=1;{}\x1b\\\x1b[u",
             columns, encoded
         );
         if print_indent > 0 {

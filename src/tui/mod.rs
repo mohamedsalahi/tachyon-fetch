@@ -38,7 +38,7 @@ pub const PAGE_THRESHOLDS: usize = 4;
 pub const PAGE_ARTWORK: usize = 5;
 pub const PAGE_KEYS: usize = 6;
 
-pub const DECK_ROWS: usize = 16;
+pub const DECK_ROWS: usize = 19;
 pub const GLYPH_FIXED_ROWS: usize = 6;
 pub const PALETTE_ROWS: usize = 13;
 pub const ARTWORK_ROWS: usize = 4;
@@ -83,6 +83,7 @@ pub enum PickerKind {
     GlyphPool,
     NoteMode,
     Emoticon,
+    Art,
 }
 
 #[derive(Clone)]
@@ -263,6 +264,45 @@ impl<'a> App<'a> {
         }
         self.refresh_note();
         self.dirty = true;
+    }
+
+    pub fn cycle_logo_side(&mut self) {
+        let side = self.cfg.logo_side().to_string();
+        input::cycle_choice(&mut self.cfg.logo_side, &["left", "right"], &side, 1);
+        self.dirty = true;
+        self.status = format!("logo {}", self.cfg.logo_side());
+    }
+
+    pub fn cycle_logo_color(&mut self) {
+        let color = self.cfg.logo_color().to_string();
+        input::cycle_choice(
+            &mut self.cfg.logo_color,
+            &["derive", "theme", "native"],
+            &color,
+            1,
+        );
+        self.dirty = true;
+        self.status = format!("logo colours {}", self.cfg.logo_color());
+    }
+
+    pub fn cycle_logo_art(&mut self, delta: i64) {
+        let mut ids = vec!["@auto".to_string()];
+        ids.extend(crate::ascii::ids());
+        ids.extend(crate::ascii::runtime_ids(&crate::ascii::logos_dir(
+            self.opts,
+        )));
+        ids.sort();
+        ids.dedup();
+        let current = self
+            .cfg
+            .logo_art
+            .clone()
+            .unwrap_or_else(|| "@auto".to_string());
+        let index = ids.iter().position(|id| *id == current).unwrap_or(0);
+        let index = util::wrap_index(index, ids.len(), delta);
+        self.cfg.logo_art = (ids[index] != "@auto").then(|| ids[index].clone());
+        self.dirty = true;
+        self.status = format!("ascii art {}", ids[index]);
     }
 
     pub fn open_note_content(&mut self) {
@@ -789,6 +829,25 @@ impl<'a> App<'a> {
                     items,
                 )
             }
+            PickerKind::Art => {
+                let mut items = vec![PickerItem {
+                    label: format!("auto · {}", crate::ascii::detect(self.demo)),
+                    value: "@auto".to_string(),
+                    checked: false,
+                }];
+                let mut ids = crate::ascii::ids();
+                ids.extend(crate::ascii::runtime_ids(&crate::ascii::logos_dir(
+                    self.opts,
+                )));
+                ids.sort();
+                ids.dedup();
+                items.extend(ids.into_iter().map(|id| PickerItem {
+                    label: id.clone(),
+                    value: id,
+                    checked: false,
+                }));
+                ("ascii art · enter picks".to_string(), items)
+            }
             PickerKind::NoteMode => (
                 "note mode".to_string(),
                 [
@@ -912,6 +971,9 @@ impl<'a> App<'a> {
                     12 => self.cfg.logo_max = None,
                     13 => self.cfg.logo_gap = None,
                     14 => self.cfg.note_mode = None,
+                    16 => self.cfg.logo_side = None,
+                    17 => self.cfg.logo_art = None,
+                    18 => self.cfg.logo_color = None,
                     15 => match self.cfg.note_mode() {
                         "quote" => self.cfg.quote = None,
                         "text" => self.cfg.note_text = None,
@@ -1013,6 +1075,9 @@ impl<'a> App<'a> {
                 self.cfg.note_mode = None;
                 self.cfg.note_text = None;
                 self.cfg.emoticon = None;
+                self.cfg.logo_side = None;
+                self.cfg.logo_art = None;
+                self.cfg.logo_color = None;
                 self.refresh_note();
                 self.refresh();
             }
@@ -1151,7 +1216,7 @@ pub fn run(opts: &Opts, base: &Config) -> io::Result<()> {
 }
 
 fn place_artwork(app: &mut App, kitty: bool, out: &mut impl Write) -> io::Result<()> {
-    let target = if kitty && app.cfg.logo_mode() != "text" {
+    let target = if kitty && app.cfg.logo_mode() == "image" {
         app.artwork.clone().zip(app.artwork_pane)
     } else {
         None
@@ -1240,6 +1305,7 @@ mod tests {
     fn artwork_pane_is_scoped_to_the_preview_toggle() {
         let opts = demo_opts();
         let mut app = App::new(&opts, &Config::default());
+        app.cfg.logo_mode = Some("image".to_string());
         app.artwork = Some(fake_png("preview-toggle.png"));
         let mut terminal =
             ratatui::Terminal::new(ratatui::backend::TestBackend::new(150, 40)).expect("terminal");
@@ -1261,6 +1327,7 @@ mod tests {
     fn place_artwork_transmits_once_and_places_once() {
         let opts = demo_opts();
         let mut app = App::new(&opts, &Config::default());
+        app.cfg.logo_mode = Some("image".to_string());
         app.artwork = Some(fake_png("square.png"));
         app.artwork_pane = Some(ratatui::layout::Rect::new(115, 3, 34, 31));
 
@@ -1414,6 +1481,73 @@ mod tests {
         assert!(app.preview);
         input::handle(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         assert!(!app.preview);
+    }
+
+    #[test]
+    fn ascii_preview_can_put_the_logo_on_the_right() {
+        let opts = demo_opts();
+        let base = Config {
+            logo_side: Some("right".to_string()),
+            ..Config::default()
+        };
+        let mut app = App::new(&opts, &base);
+        let mut terminal =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(170, 44)).expect("terminal");
+        app.preview = true;
+        terminal
+            .draw(|frame| view::draw(frame, &mut app))
+            .expect("draw");
+        let buffer = terminal.backend().buffer();
+        let mut text = String::new();
+        for y in 0..buffer.area.height {
+            for x in 0..buffer.area.width {
+                text.push_str(buffer.cell((x, y)).map(|cell| cell.symbol()).unwrap_or(" "));
+            }
+            text.push('\n');
+        }
+        let first = text.lines().next().unwrap_or("");
+        assert!(
+            first.trim_start().starts_with("TACHYON"),
+            "readout must lead:\n{}",
+            first
+        );
+        assert!(
+            text.contains("▗▄▄▄") || text.contains("▜███"),
+            "logo must still be drawn"
+        );
+    }
+
+    #[test]
+    fn deck_sets_logo_side_art_and_colours() {
+        use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        let opts = demo_opts();
+        let mut app = App::new(&opts, &Config::default());
+        app.page = PAGE_DECK;
+        app.cursors[PAGE_DECK] = 16;
+        input::handle(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(app.cfg.logo_side(), "right");
+        input::handle(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE),
+        );
+        assert_eq!(app.cursors[PAGE_DECK], 17);
+        input::handle(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert!(app.picker.is_some());
+        for ch in "arch".chars() {
+            input::handle(
+                &mut app,
+                KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE),
+            );
+        }
+        input::handle(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(app.cfg.logo_art.as_deref(), Some("arch"));
+        input::handle(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE),
+        );
+        assert_eq!(app.cursors[PAGE_DECK], 18);
+        input::handle(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(app.cfg.logo_color(), "theme");
     }
 
     #[test]

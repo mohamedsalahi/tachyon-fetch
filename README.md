@@ -45,6 +45,9 @@ It is designed for people who want the truth about their systems at a glance —
 | **Reveal motion** | a short staged entrance, or silence with `--static` |
 | **Configurator** | `--tui` pages for modules, deck, glyphs, palette, thresholds and artwork, plus a `P` full-screen preview of the real frame |
 | **Palette engine** | six built-in themes (Solitude, Vantablack, Hackerman, Retro 82, Rose Pine, Flexoki Light) plus a TSV table and the active theme state |
+| **ASCII logos** | built-in distro art (NixOS, Arch, Fedora, Ubuntu, Mint, Gentoo, Debian, openSUSE, Alpine, Void, Manjaro, Pop, Kali), auto-detected and replaceable from a drop-in directory |
+| **Logo colours** | keep the distro palette, borrow the active theme, or derive a palette from the logo and apply it to the whole frame (default) |
+| **Logo side** | left or right, so the frame uses the terminal's full width |
 | **Text logo** | any system font rendered as braille art with a two-tone tint — no image protocol needed |
 | **Image logo** | kitty graphics protocol with placement that never reflows text |
 | **Glyph system** | one mapped glyph for every fetched object; pin it, randomize it, or draw it from a custom pool; per-section glyphs; browse any installed font and take a glyph or build a pool from it |
@@ -144,6 +147,8 @@ GPU temp        52 °C
 | `--state <path>` | alternate theme state file |
 | `--list-themes` | print the built-in and installed palettes |
 | `--fonts` | list system font families (fontconfig) |
+| `--list-logos` | print built-in and drop-in ascii logo ids |
+| `--logos <path>` | ascii logo directory (default `$XDG_DATA_HOME/tachyon/logos`) |
 | `--convert <src> <dst>` | convert an image to PNG (used by album ingest) |
 | `-h`, `-V` | help and version |
 
@@ -199,8 +204,11 @@ rule   = ─
 units  = binary
 temp   = c
 
-# logo: image protocol or a text logo rendered in any system font
-logo_mode = text
+# logo: distro ascii art, a text logo in any system font, or an image
+logo_mode = ascii
+logo_art  = auto        # auto-detected from /etc/os-release; or nixos, arch...
+logo_color = derive     # derive · theme · native
+logo_side = left        # left · right
 logo_text = TACHYON
 logo_font = JetBrainsMono Nerd Font
 logo_size = 110
@@ -241,7 +249,7 @@ every   = run          # run · hour · day
 themes  = Solitude,Hackerman,Rose Pine
 ```
 
-Fonts are resolved through fontconfig (any installed TTF/OTF family; the glyph browser also reads TTC collections for their character maps, though the text-logo rasterizer skips them). The rotation set is filtered to themes that actually differ between dark and light — a duplicated dark row does not count as a light variant. Rotation applies when the fetch runs — the configurator sets the rules and previews the pinned selection. Every key above is editable inside `--tui`; the file remains the authority. Glyph keys accept `auto` (the built-in map), `random` (from the pool), `off`, or a single character. `logo_mode = image` uses the kitty graphics protocol; `text` renders the word as braille art. Rotation requires a palette set and an album; an explicit `image` or `theme` wins over rotation for that run. Rotation cursors live in `$XDG_STATE_HOME/tachyon/rotation`, never in the config.
+Fonts are resolved through fontconfig (any installed TTF/OTF family; the glyph browser also reads TTC collections for their character maps, though the text-logo rasterizer skips them). ASCII logos are detected from `/etc/os-release`; drop-in art lives in `$XDG_DATA_HOME/tachyon/logos/<id>.txt` and needs no rebuild (format in `logos/README.md`). `logo_color = native` keeps the distro's own colours, `theme` paints the art with the active palette, and `derive` (the default) lifts the logo's accents into the readout palette. The rotation set is filtered to themes that actually differ between dark and light — a duplicated dark row does not count as a light variant. Rotation applies when the fetch runs — the configurator sets the rules and previews the pinned selection. Every key above is editable inside `--tui`; the file remains the authority. Glyph keys accept `auto` (the built-in map), `random` (from the pool), `off`, or a single character. `logo_mode = image` uses the kitty graphics protocol; `text` renders the word as braille art; `ascii` uses the distro art. Rotation requires a palette set and an album; an explicit `image` or `theme` wins over rotation for that run. Rotation cursors live in `$XDG_STATE_HOME/tachyon/rotation`, never in the config.
 
 | Resource | Default |
 |---|---|
@@ -286,6 +294,7 @@ The six built-in themes are always available; a palette table (for example, one 
 - **One write.** The frame is composed in memory and emitted once, so a slow terminal never tears the layout.
 - **One engine.** The `P` preview and the configurator render through the same layout code as the CLI.
 - **Text logos locally.** Fonts are rasterized in-process with `fontdue`; fontconfig is only consulted when you open the picker or resolve a family.
+- **Logo palettes.** ASCII art carries named colour slots; the derived mode lifts its two most saturated colours into the frame, so the logo and the panels agree without hard-coding a theme.
 - **Contained unsafe.** `unsafe` is limited to the NVML ABI, termios and the terminal bindings.
 - **Nothing persistent except intent.** Renders do not write state; only an explicit configurator save does.
 - **No network.** Ever.

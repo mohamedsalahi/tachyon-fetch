@@ -236,12 +236,22 @@ fn deck(frame: &mut Frame, area: Rect, app: &App) {
         row("gap", &app.cfg.logo_gap.unwrap_or(3).to_string(), app),
         row("note mode", app.cfg.note_mode(), app),
         row("note", &note_value(app), app),
+        row("logo side", app.cfg.logo_side(), app),
+        row("ascii art", &art_value(app), app),
+        row("logo colors", app.cfg.logo_color(), app),
     ];
     let table = Table::new(rows, [Constraint::Length(16), Constraint::Min(20)])
         .block(panel(&format!("deck · {} · {}", logo_mode, font), app))
         .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED));
     frame.render_stateful_widget(table, area, &mut table_state(app.cursors[PAGE_DECK]));
     let _ = (DECK_ROWS, pal);
+}
+
+fn art_value(app: &App) -> String {
+    app.cfg
+        .logo_art
+        .clone()
+        .unwrap_or_else(|| format!("auto · {}", crate::ascii::detect(app.demo)))
 }
 
 fn note_value(app: &App) -> String {
@@ -504,6 +514,63 @@ fn full_preview(frame: &mut Frame, area: Rect, app: &mut App) {
     };
     let cap = app.logo_cap(area.width as usize);
     let gap = app.cfg.logo_gap.unwrap_or(3) as usize;
+    let right = app.cfg.logo_side() == "right";
+
+    if logo_mode == "ascii" {
+        let id = app
+            .cfg
+            .logo_art
+            .clone()
+            .unwrap_or_else(|| crate::ascii::detect(app.demo));
+        let dir = crate::ascii::logos_dir(app.opts);
+        let fits = |art: &crate::ascii::LoadedArt| {
+            let width = crate::ascii::width(&art.lines);
+            width > 0 && width + gap + 56 < area.width as usize
+        };
+        let art = crate::ascii::load(&id, &dir, false)
+            .filter(fits)
+            .or_else(|| crate::ascii::load(&id, &dir, true).filter(fits));
+        if let Some(art) = art {
+            let mut theme = app.theme.clone();
+            if app.cfg.logo_color() == "derive" {
+                theme.pal = crate::ascii::derive_palette(&art.colors, &theme.pal);
+            }
+            let colors = if app.cfg.logo_color() == "native" && !art.colors.is_empty() {
+                art.colors.clone()
+            } else {
+                crate::ascii::theme_colors(&theme.pal)
+            };
+            let art_lines: Vec<crate::Line> = crate::ascii::rendered(&art, &colors)
+                .into_iter()
+                .map(|spans| {
+                    let mut line = crate::Line::new();
+                    for (text, color) in spans {
+                        line.push(&text, Some(color), false);
+                    }
+                    line
+                })
+                .collect();
+            let art_width = crate::ascii::width(&art.lines);
+            let width = area.width as usize - art_width - gap - 1;
+            let lines = crate::render(
+                &theme,
+                &app.data,
+                &app.note,
+                width.max(30),
+                app.glyph_seed,
+                true,
+                app.demo,
+                &app.cfg,
+            );
+            let composed = if right {
+                crate::hcat(&lines, &art_lines, width, gap)
+            } else {
+                crate::hcat(&art_lines, &lines, art_width, gap)
+            };
+            draw_plain(frame, area, app, composed);
+            return;
+        }
+    }
 
     if logo_mode == "text" {
         if let Some(logo) = crate::text_logo(&app.cfg, &app.data.hostname, cap, &pal) {
@@ -519,14 +586,19 @@ fn full_preview(frame: &mut Frame, area: Rect, app: &mut App) {
                     app.demo,
                     &app.cfg,
                 );
-                let lines = crate::compose_logo(&logo, lines, gap);
-                draw_plain(frame, area, app, lines);
+                let composed = if right {
+                    crate::hcat(&lines, &logo.lines, width, gap)
+                } else {
+                    crate::compose_logo(&logo, lines, gap)
+                };
+                draw_plain(frame, area, app, composed);
                 return;
             }
         }
     }
 
     let mut indent = 0usize;
+    let mut readout_width = area.width as usize - 1;
     if logo_mode == "image" && area.width as usize > cap + gap + 56 {
         if let Some(art) = &app.artwork {
             if let Some((img_w, img_h)) = crate::png_size(art) {
@@ -540,16 +612,26 @@ fn full_preview(frame: &mut Frame, area: Rect, app: &mut App) {
                     let image_rows = ((cap as f64) * cell_ratio * (img_h as f64 / img_w as f64))
                         .ceil()
                         .clamp(3.0, area.height as f64) as u16;
-                    app.artwork_pane = Some(Rect::new(area.x, area.y, cap as u16, image_rows));
+                    let img_width = cap + gap;
+                    let width = area.width as usize - img_width - 1;
+                    let x = if right {
+                        area.x + (width + gap) as u16
+                    } else {
+                        area.x
+                    };
+                    app.artwork_pane = Some(Rect::new(x, area.y, cap as u16, image_rows));
                     if crate::in_kitty() {
-                        indent = cap + gap;
+                        readout_width = width;
+                        if !right {
+                            indent = img_width;
+                        }
                     }
                 }
             }
         }
     }
 
-    let width = (area.width as usize).saturating_sub(indent + 1).max(30);
+    let width = readout_width.max(30);
     let lines = crate::render(
         &app.theme,
         &app.data,

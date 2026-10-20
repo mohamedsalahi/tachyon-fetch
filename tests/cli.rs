@@ -238,3 +238,14 @@ fn convert_missing_source_fails() {
     assert_eq!(output.status.code(), Some(1));
     assert!(stderr(&output).contains("convert failed"));
 }
+
+#[test]
+fn list_logos_covers_the_named_defaults() {
+    let root = sandbox("logos");
+    let output = run(&root, &["--list-logos"]);
+    assert!(output.status.success());
+    let out = stdout(&output);
+    for id in ["nixos", "arch", "fedora", "ubuntu", "mint", "gentoo"] {
+        assert!(out.lines().any(|line| line == id), "missing {id} in {out}");
+    }
+}

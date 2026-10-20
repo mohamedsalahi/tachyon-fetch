@@ -299,6 +299,9 @@ pub struct Config {
     pub logo_min: Option<u8>,
     pub logo_max: Option<u8>,
     pub logo_gap: Option<u8>,
+    pub logo_art: Option<String>,
+    pub logo_color: Option<String>,
+    pub logo_side: Option<String>,
     pub glyph_system: Option<String>,
     pub glyph_core: Option<String>,
     pub glyph_power: Option<String>,
@@ -336,7 +339,15 @@ impl Config {
     }
 
     pub fn logo_mode(&self) -> &str {
-        self.logo_mode.as_deref().unwrap_or("image")
+        self.logo_mode.as_deref().unwrap_or("ascii")
+    }
+
+    pub fn logo_color(&self) -> &str {
+        self.logo_color.as_deref().unwrap_or("derive")
+    }
+
+    pub fn logo_side(&self) -> &str {
+        self.logo_side.as_deref().unwrap_or("left")
     }
 
     pub fn note_mode(&self) -> &str {
@@ -465,6 +476,9 @@ fn place_of(key: &str) -> Option<(Place, &str)> {
         "logo_min",
         "logo_max",
         "logo_gap",
+        "logo_art",
+        "logo_color",
+        "logo_side",
         "color.bg",
         "color.fg",
         "color.dim",
@@ -600,6 +614,17 @@ pub fn load_config(path: &Path) -> Config {
                         Some(value.to_string())
                     }
                 }
+                (Place::Flat, "logo_art") => {
+                    config.logo_art = if value.is_empty() || value == "auto" {
+                        None
+                    } else {
+                        Some(value.to_string())
+                    }
+                }
+                (Place::Flat, "logo_color") => {
+                    config.logo_color = choice(value, &["derive", "theme", "native"])
+                }
+                (Place::Flat, "logo_side") => config.logo_side = choice(value, &["left", "right"]),
                 (Place::Flat, "glyph") if !value.is_empty() => {
                     config.glyph = Some(value.to_string())
                 }
@@ -726,6 +751,9 @@ fn flat_lines(config: &Config) -> Vec<(String, String)> {
     push("note_mode", config.note_mode.clone());
     push("note_text", config.note_text.clone());
     push("emoticon", config.emoticon.clone());
+    push("logo_art", config.logo_art.clone());
+    push("logo_color", config.logo_color.clone());
+    push("logo_side", config.logo_side.clone());
     push("glyph", config.glyph.clone());
     push("album", config.album.clone());
     push(
@@ -1113,7 +1141,7 @@ mod tests {
             "# deck\n\
              glyph = ◆\n\
              logo_mode = text\n\
-             logo_text = SALAHY\n             quote = “We must know. We will know.” — David Hilbert\n\
+             logo_text = SALAHY\n             quote = “We must know. We will know.” — David Hilbert\n            logo_art = nixos\n            logo_color = native\n            logo_side = right\n\
              glyph.memory = ⬢\n\
              [glyphs]\n\
              row = random\n\
@@ -1132,6 +1160,9 @@ mod tests {
             config.quote.as_deref(),
             Some("“We must know. We will know.” — David Hilbert")
         );
+        assert_eq!(config.logo_art.as_deref(), Some("nixos"));
+        assert_eq!(config.logo_color(), "native");
+        assert_eq!(config.logo_side(), "right");
         assert_eq!(config.glyphs.get("memory").map(String::as_str), Some("⬢"));
         assert_eq!(config.glyphs.get("swap").map(String::as_str), Some("✦"));
         assert_eq!(config.glyph_row_mode(), "random");
