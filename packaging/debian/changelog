@@ -1,3 +1,9 @@
+tachyon-fetch (0.7.1-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Mohamed Salahi <264395179+mohamedsalahi@users.noreply.github.com>  Tue, 20 Oct 2026 23:30:00 +0000
+
 tachyon-fetch (0.7.0-1) unstable; urgency=medium
 
   * Initial package.

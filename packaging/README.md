@@ -2,7 +2,7 @@
 
 Status: the source build works everywhere; the distro packages below are
 staged and have not been built on their target systems yet. Release
-tarball: `v0.7.0`, sha256 `aaafdc2804a28da836758fdab3a99cab9514d474261c2e4fc3e4532a4860fcd9`.
+tarball: `v0.7.1`, sha256 `9ac4c3269103b91e872a6ee91623a3ed676fa060e3e6840359abc353926cd821`.
 
 | Priority | Target | Package manager | Staged file | Status |
 |---|---|---|---|---|
@@ -12,7 +12,7 @@ tarball: `v0.7.0`, sha256 `aaafdc2804a28da836758fdab3a99cab9514d474261c2e4fc3e45
 | 4 | Ubuntu, Mint | apt | `debian/` | source build + `.deb` in CI; `dpkg-buildpackage` pending |
 | 5 | Gentoo | portage | `gentoo/` | skeleton; `CRATES` list not generated |
 
-The release tarball is `https://github.com/mohamedsalahi/tachyon-fetch/archive/refs/tags/v0.7.0.tar.gz`.
+The release tarball is `https://github.com/mohamedsalahi/tachyon-fetch/archive/refs/tags/v0.7.1.tar.gz`.
 Packaging files live in the repository after the tag, so the checksum
 above is not self-referential. For the next release:
 

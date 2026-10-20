@@ -1,6 +1,6 @@
 # Maintainer: Mohamed Salahi <264395179+mohamedsalahi@users.noreply.github.com>
 pkgname=tachyon-fetch
-pkgver=0.7.0
+pkgver=0.7.1
 pkgrel=1
 pkgdesc='Cockpit-grade system fetch with a built-in configurator and distro logos'
 arch=('x86_64' 'aarch64')
@@ -9,7 +9,7 @@ license=('MIT')
 depends=('gcc-libs' 'fontconfig')
 makedepends=('cargo' 'rust')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('aaafdc2804a28da836758fdab3a99cab9514d474261c2e4fc3e4532a4860fcd9')
+sha256sums=('9ac4c3269103b91e872a6ee91623a3ed676fa060e3e6840359abc353926cd821')
 
 build() {
   cd "$pkgname-$pkgver"
