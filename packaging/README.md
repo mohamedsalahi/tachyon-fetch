@@ -7,9 +7,9 @@ tarball: `v0.7.0`, sha256 `aaafdc2804a28da836758fdab3a99cab9514d474261c2e4fc3e45
 | Priority | Target | Package manager | Staged file | Status |
 |---|---|---|---|---|
 | 1 | NixOS | nix | flake outputs + `../nixpkgs-submission/` | flake builds and tests pass; nixpkgs PR pending |
-| 2 | Arch Linux | pacman | `arch/PKGBUILD` | draft, needs `makepkg` on Arch |
-| 3 | Fedora | dnf | `fedora/tachyon-fetch.spec` | draft, needs `fedpkg`/COPR |
-| 4 | Ubuntu, Mint | apt | `debian/` | draft, needs `dpkg-buildpackage` |
+| 2 | Arch Linux | pacman | `arch/PKGBUILD` | source build in CI; `makepkg` pending |
+| 3 | Fedora | dnf | `fedora/tachyon-fetch.spec` | source build in CI; `fedpkg`/COPR pending |
+| 4 | Ubuntu, Mint | apt | `debian/` | source build + `.deb` in CI; `dpkg-buildpackage` pending |
 | 5 | Gentoo | portage | `gentoo/` | skeleton; `CRATES` list not generated |
 
 The release tarball is `https://github.com/mohamedsalahi/tachyon-fetch/archive/refs/tags/v0.7.0.tar.gz`.
@@ -20,6 +20,24 @@ above is not self-referential. For the next release:
 2. Download the tag tarball, compute `sha256sum`.
 3. Update the version and checksum here and in each package recipe.
 4. Run the package build on the target distro before publishing.
+
+## CI
+
+`.github/workflows/ci.yml` runs on pushes to `main`, pull requests and `v*`
+tags:
+
+- `quality`: rustfmt, clippy `-D warnings`, tests.
+- `arch`, `fedora`, `ubuntu`: release test+build inside the target distro
+  container, uploaded as tarballs; Ubuntu also builds a `.deb`.
+- `nix`: `nix-build default.nix`, uploaded as a tarball.
+- `packaging`: syntax-check PKGBUILD/ebuild, parse the RPM spec and Debian
+  changelog.
+- `release` (tags only): attaches all artifacts plus `SHA256SUMS` to the
+  GitHub release.
+
+These artifacts prove the source builds on each distro; they are not
+native packages. The PKGBUILD, spec, Debian tree and ebuild still need the
+target package tooling.
 
 ## Publish routes
 

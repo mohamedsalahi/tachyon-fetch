@@ -78,11 +78,15 @@ cargo install --git https://github.com/mohamedsalahi/tachyon-fetch --locked
 
 The crate is named `tachyon-fetch`; the installed command is `tachyon`. A recent stable Rust toolchain is the only build requirement.
 
-Distro packages are staged under [`packaging/`](packaging/README.md):
-NixOS (flake, priority 1), Arch (PKGBUILD), Fedora (spec/COPR),
-Ubuntu/Mint (Debian package) and Gentoo (ebuild skeleton). They are drafts
-until built on their target systems; the source build above works
-everywhere in the meantime.
+On Nix:
+
+```sh
+nix-build
+./result/bin/tachyon
+```
+
+`default.nix` builds from the checkout with `Cargo.lock` and wraps the
+binary with fontconfig; no hashes to maintain.
 
 <br>
 
