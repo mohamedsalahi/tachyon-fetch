@@ -100,8 +100,8 @@ jobs:
         with:
           name: fedora
           path: |
-            "*.tar.gz"
-            "*.rpm"
+            *.tar.gz
+            *.rpm
           if-no-files-found: error
 
   ubuntu:
