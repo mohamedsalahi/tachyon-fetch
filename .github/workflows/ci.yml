@@ -128,19 +128,7 @@ jobs:
           VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
           echo "value=$VERSION" >> "$GITHUB_OUTPUT"
       - run: nix-build default.nix -o result
-      - run: |
-          VERSION="${{ steps.version.outputs.value }}"
-          NAME="tachyon-fetch-${VERSION}-nix-x86_64"
-          mkdir -p "dist/${NAME}"
-          cp result/bin/tachyon "dist/${NAME}/"
-          cp LICENSE "dist/${NAME}/"
-          cp logos/LICENSE-fastfetch "dist/${NAME}/"
-          tar -C dist -czf "${NAME}.tar.gz" "${NAME}"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: nix
-          path: "*.tar.gz"
-          if-no-files-found: error
+      - run: ./result/bin/tachyon --version
 
   packaging:
     runs-on: ubuntu-latest

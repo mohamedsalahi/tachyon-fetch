@@ -29,7 +29,8 @@ tags:
 - `quality`: rustfmt, clippy `-D warnings`, tests.
 - `arch`, `fedora`, `ubuntu`: release test+build inside the target distro
   container, uploaded as tarballs; Ubuntu also builds a `.deb`.
-- `nix`: `nix-build default.nix`, uploaded as a tarball.
+- `nix`: `nix-build default.nix` plus a version check. No tarball: the
+  build is a store wrapper, so Nix users should use the flake or `nix-build`.
 - `packaging`: syntax-check PKGBUILD/ebuild, parse the RPM spec and Debian
   changelog.
 - `release` (tags only): attaches all artifacts plus `SHA256SUMS` to the
