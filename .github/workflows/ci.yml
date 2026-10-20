@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     container: archlinux:latest
     steps:
-      - run: pacman -Syu --noconfirm git base-devel rust cargo fontconfig sudo
+      - run: pacman -Syu --noconfirm git base-devel rust cargo fontconfig sudo pacman-contrib
       - uses: actions/checkout@v5
       - id: version
         run: |
@@ -52,14 +52,15 @@ jobs:
           cp -r packaging/arch /tmp/archpkg
           chown -R builder:builder /tmp/archpkg
           cd /tmp/archpkg
+          sudo -u builder updpkgsums
           sudo -u builder makepkg -s --noconfirm
           cp ./*.pkg.tar.zst "$GITHUB_WORKSPACE/"
       - uses: actions/upload-artifact@v4
         with:
           name: arch
           path: |
-            "*.tar.gz"
-            "*.pkg.tar.zst"
+            *.tar.gz
+            *.pkg.tar.zst
           if-no-files-found: error
 
   fedora:
@@ -89,6 +90,7 @@ jobs:
           curl -L --fail -o "/tmp/rpmbuild/SOURCES/tachyon-fetch-${VERSION}.tar.gz" \
             "https://github.com/mohamedsalahi/tachyon-fetch/archive/refs/tags/v${VERSION}.tar.gz"
           cp packaging/fedora/tachyon-fetch.spec /tmp/rpmbuild/SPECS/
+          cp packaging/fedora/*.patch /tmp/rpmbuild/SOURCES/
           rpmbuild -ba --nodeps \
             --define "_topdir /tmp/rpmbuild" \
             --define "_sourcedir /tmp/rpmbuild/SOURCES" \
@@ -121,7 +123,7 @@ jobs:
         run: |
           rm -rf /tmp/debbuild
           mkdir -p /tmp/debbuild
-          git archive HEAD | tar -x -C /tmp/debbuild
+          tar --exclude=./target --exclude=./.git --exclude=./result -cf - . | tar -xf - -C /tmp/debbuild
           cp -r packaging/debian /tmp/debbuild/debian
           cd /tmp/debbuild
           dpkg-buildpackage -b -us -uc -d
@@ -171,6 +173,9 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
           path: dist

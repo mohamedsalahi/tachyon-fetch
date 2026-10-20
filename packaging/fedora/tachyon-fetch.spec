@@ -5,6 +5,7 @@ Summary:        Cockpit-grade system fetch with a configurator and distro logos
 License:        MIT
 URL:            https://github.com/mohamedsalahi/tachyon-fetch
 Source0:        %{url}/archive/refs/tags/v%{version}.tar.gz#/%{name}-%{version}.tar.gz
+Patch0:         cargo-rpm-profile.patch
 BuildRequires:  rust-packaging
 BuildRequires:  gcc
 Requires:       fontconfig
@@ -16,7 +17,7 @@ distro logos, a system-font text logo and kitty graphics artwork are
 supported.
 
 %prep
-%autosetup -n %{name}-%{version}
+%autosetup -n %{name}-%{version} -p1
 
 %generate_buildrequires
 %cargo_generate_buildrequires
