@@ -55,9 +55,9 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
 
     let dirty = if app.dirty { "*" } else { "" };
     let hints = match app.page {
-        PAGE_MODULES => "space toggle · J/K reorder · x restore",
+        PAGE_MODULES => "space toggle · shift+enter / m move · J/K reorder · x restore",
         PAGE_DECK => "-/+ adjust · enter act · x reset",
-        PAGE_GLYPHS => "enter edit · space pin/random · +/- cycle · p pin · r all random",
+        PAGE_GLYPHS => "enter glyph library · e value · space pin/random · G pool from font",
         PAGE_PALETTE => "enter pick · space marks the rotation set · p copy · x clear",
         PAGE_ARTWORK => "enter browse · a add photo · -/+ rotate · x clear",
         PAGE_PREVIEW => "j/k scroll · g top · G bottom",
@@ -145,7 +145,14 @@ fn modules(frame: &mut Frame, area: Rect, app: &App) {
             let glyph = crate::config::module_glyph(&app.cfg, id, app.glyph_seed)
                 .map(|glyph| glyph.to_string())
                 .unwrap_or_else(|| " ".to_string());
+            let picked = app.picked.as_ref().is_some_and(|(picked, _)| picked == id);
+            let cursor = if picked {
+                RSpan::styled("↕ ", util::fg(pal.warn).add_modifier(Modifier::BOLD))
+            } else {
+                RSpan::raw("  ")
+            };
             ListItem::new(RLine::from(vec![
+                cursor,
                 mark,
                 RSpan::raw(" "),
                 RSpan::styled(format!("{} ", glyph), util::fg(pal.accent2)),
@@ -224,12 +231,27 @@ fn deck(frame: &mut Frame, area: Rect, app: &App) {
         row("min cols", &app.cfg.logo_min.unwrap_or(26).to_string(), app),
         row("max cols", &app.cfg.logo_max.unwrap_or(46).to_string(), app),
         row("gap", &app.cfg.logo_gap.unwrap_or(3).to_string(), app),
+        row("quote", &quote_value(app), app),
     ];
     let table = Table::new(rows, [Constraint::Length(16), Constraint::Min(20)])
         .block(panel(&format!("deck · {} · {}", logo_mode, font), app))
         .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED));
     frame.render_stateful_widget(table, area, &mut table_state(app.cursors[PAGE_DECK]));
     let _ = (DECK_ROWS, pal);
+}
+
+fn quote_value(app: &App) -> String {
+    match app.cfg.quote.as_deref() {
+        None => "random".to_string(),
+        Some("off") | Some("none") => "off".to_string(),
+        Some(text) => {
+            let mut short: String = text.chars().take(64).collect();
+            if text.chars().count() > 64 {
+                short.push('…');
+            }
+            short
+        }
+    }
 }
 
 fn glyph_mode(app: &App, row: usize) -> String {
@@ -599,9 +621,10 @@ fn keys(frame: &mut Frame, area: Rect, app: &App) {
         ("1-8 / tab", "jump · cycle pages"),
         ("j k / ↑ ↓", "move · preview scroll"),
         ("+ -", "adjust value or cycle glyph"),
-        ("space", "toggle · pin/random · mark rotation set"),
-        ("enter", "edit · open picker · apply"),
-        ("J K", "reorder the enabled modules"),
+        ("space", "toggle · pin/random · mark a set"),
+        ("enter", "glyph library · open picker · apply"),
+        ("e / g / G", "type a glyph value · library · pool from font"),
+        ("shift+enter / m", "pick up · move with j/k · drop"),
         ("p", "pin the current glyph · copy palette"),
         ("r", "randomize all glyphs · refresh data"),
         ("a", "add a photo to the album"),
@@ -637,16 +660,33 @@ fn keys(frame: &mut Frame, area: Rect, app: &App) {
 
 fn picker_popup(frame: &mut Frame, area: Rect, app: &App, picker: &super::Picker) {
     let pal = app.theme.pal;
-    let width = 72.min(area.width.saturating_sub(6)).max(30);
-    let height = 22.min(area.height.saturating_sub(4)).max(8);
+    let width = 78.min(area.width.saturating_sub(4)).max(30);
+    let height = 24.min(area.height.saturating_sub(4)).max(8);
     let popup = util::centered(area, width, height);
     frame.render_widget(Clear, popup);
+    let block = panel(&picker.title, app);
+    let inner = block.inner(popup);
+    frame.render_widget(block, popup);
+    let rows = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Min(3),
+        Constraint::Length(1),
+    ])
+    .split(inner);
+
+    let filter = RLine::from(vec![
+        RSpan::styled(" / ", util::fg(pal.accent2)),
+        RSpan::styled(picker.filter.clone(), util::fg(pal.fg)),
+        RSpan::styled("▏", util::fg(pal.accent)),
+    ]);
+    frame.render_widget(Paragraph::new(filter), rows[0]);
+
     let visible = picker.visible();
     let items: Vec<ListItem> = visible
         .iter()
         .map(|index| {
             let item = &picker.items[*index];
-            let label = if picker.kind == PickerKind::ThemeSet {
+            let label = if matches!(picker.kind, PickerKind::ThemeSet | PickerKind::GlyphPool) {
                 format!("[{}] {}", if item.checked { "x" } else { " " }, item.label)
             } else {
                 item.label.clone()
@@ -654,42 +694,32 @@ fn picker_popup(frame: &mut Frame, area: Rect, app: &App, picker: &super::Picker
             ListItem::new(RLine::from(RSpan::styled(label, util::fg(pal.fg))))
         })
         .collect();
-    let block = panel(&picker.title, app);
     if items.is_empty() {
         frame.render_widget(
-            Paragraph::new(RSpan::styled("  no matches", util::fg(pal.dim))).block(block),
-            popup,
+            Paragraph::new(RSpan::styled("  no matches", util::fg(pal.dim))),
+            rows[1],
         );
     } else {
-        let list = List::new(items).block(block).highlight_style(
+        let list = List::new(items).highlight_style(
             util::bg(pal.accent)
                 .fg(ratatui::style::Color::Rgb(pal.bg.0, pal.bg.1, pal.bg.2))
                 .add_modifier(Modifier::BOLD),
         );
         let mut state = ListState::default();
         state.select(Some(picker.cursor.min(visible.len().saturating_sub(1))));
-        frame.render_stateful_widget(list, popup, &mut state);
+        frame.render_stateful_widget(list, rows[1], &mut state);
     }
-    let footer = RLine::from(vec![
-        RSpan::styled(" / ", util::fg(pal.accent2)),
-        RSpan::styled(&picker.filter, util::fg(pal.fg)),
-        RSpan::styled("▏", util::fg(pal.accent)),
-        RSpan::styled(
-            if picker.kind == PickerKind::ThemeSet {
-                "  space mark · ↑↓ move · enter close · esc cancel"
-            } else {
-                "  ↑↓ move · type to filter · enter pick · esc cancel"
-            },
-            util::fg(pal.dim),
-        ),
-    ]);
-    let footer_area = Rect {
-        x: popup.x + 1,
-        y: popup.y + popup.height.saturating_sub(2),
-        width: popup.width.saturating_sub(2),
-        height: 1,
+
+    let hint = match picker.kind {
+        PickerKind::ThemeSet => " space mark · ↑↓ move · enter close · esc cancel",
+        PickerKind::GlyphPool => " space mark · ↑↓ move · enter add · ctrl-f font · esc cancel",
+        PickerKind::Glyph(_) => " ↑↓ move · type filter · enter pin · ctrl-f font · esc cancel",
+        _ => " ↑↓ move · type to filter · enter pick · esc cancel",
     };
-    frame.render_widget(Paragraph::new(footer), footer_area);
+    frame.render_widget(
+        Paragraph::new(RSpan::styled(hint, util::fg(pal.dim))),
+        rows[2],
+    );
 }
 
 fn edit_popup(frame: &mut Frame, area: Rect, app: &App) {
@@ -706,6 +736,7 @@ fn edit_popup(frame: &mut Frame, area: Rect, app: &App) {
         EditTarget::Photo => "photo path".to_string(),
         EditTarget::LogoText => "logo text".to_string(),
         EditTarget::Pool => "glyph pool".to_string(),
+        EditTarget::Quote => "quote text".to_string(),
     };
     let line = RLine::from(vec![
         RSpan::styled(" ", util::fg(pal.fg)),

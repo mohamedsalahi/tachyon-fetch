@@ -5,6 +5,61 @@ use std::process::Command;
 
 use fontdue::{Font, FontSettings};
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FontGlyph {
+    pub ch: char,
+    pub code: u32,
+    pub name: Option<String>,
+}
+
+pub fn font_glyphs(path: &Path) -> Vec<FontGlyph> {
+    let Ok(data) = fs::read(path) else {
+        return Vec::new();
+    };
+    let Ok(face) = ttf_parser::Face::parse(&data, 0) else {
+        return Vec::new();
+    };
+    let mut codes = std::collections::BTreeSet::new();
+    let Some(cmap) = face.tables().cmap else {
+        return Vec::new();
+    };
+    for subtable in cmap.subtables {
+        if subtable.is_unicode() {
+            subtable.codepoints(|code| {
+                codes.insert(code);
+            });
+        }
+    }
+    let mut glyphs = Vec::with_capacity(codes.len().min(24000));
+    for code in codes {
+        if glyphs.len() >= 24000 {
+            break;
+        }
+        let Some(ch) = char::from_u32(code) else {
+            continue;
+        };
+        if ch.is_control() || code == 0x20 {
+            continue;
+        }
+        let name = face
+            .glyph_index(ch)
+            .and_then(|glyph| face.glyph_name(glyph))
+            .map(str::to_string);
+        glyphs.push(FontGlyph { ch, code, name });
+    }
+    glyphs.sort_by_key(|glyph| (glyph.code < 0xE000, glyph.code));
+    glyphs
+}
+
+pub fn glyph_label(glyph: &FontGlyph) -> String {
+    match &glyph.name {
+        Some(name) if !name.is_empty() => {
+            format!("{}  {}  U+{:04X}", glyph.ch, name, glyph.code)
+        }
+        _ => format!("{}  U+{:04X}", glyph.ch, glyph.code),
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextArt {
     pub rows: Vec<String>,
@@ -217,6 +272,33 @@ pub fn coverage_to_braille(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn glyph_reading_rejects_garbage() {
+        assert!(font_glyphs(Path::new("/nonexistent/font.ttf")).is_empty());
+        let dir = std::env::temp_dir().join(format!("tachyon-font-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("dir");
+        let path = dir.join("junk.ttf");
+        std::fs::write(&path, b"not a font").expect("write");
+        assert!(font_glyphs(&path).is_empty());
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn glyph_label_prefers_the_post_name() {
+        let named = FontGlyph {
+            ch: '󰍛',
+            code: 0xF035B,
+            name: Some("nf-md-memory".to_string()),
+        };
+        assert_eq!(glyph_label(&named), "󰍛  nf-md-memory  U+F035B");
+        let unnamed = FontGlyph {
+            ch: '◆',
+            code: 0x25C6,
+            name: None,
+        };
+        assert_eq!(glyph_label(&unnamed), "◆  U+25C6");
+    }
 
     #[test]
     fn fc_list_dedupes_and_filters() {

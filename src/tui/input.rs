@@ -29,8 +29,46 @@ pub fn handle(app: &mut App, key: KeyEvent) -> bool {
         return true;
     }
 
+    if app.picked.is_some() {
+        match key.code {
+            KeyCode::Esc => {
+                cancel_pick(app);
+                return false;
+            }
+            KeyCode::Enter if key.modifiers.contains(KeyModifiers::SHIFT) => {
+                drop_pick(app);
+                return false;
+            }
+            KeyCode::Char('m') => {
+                drop_pick(app);
+                return false;
+            }
+            KeyCode::Char('j') | KeyCode::Down | KeyCode::Char('J') => {
+                move_picked(app, 1);
+                return false;
+            }
+            KeyCode::Char('k') | KeyCode::Up | KeyCode::Char('K') => {
+                move_picked(app, -1);
+                return false;
+            }
+            _ => {}
+        }
+    }
+
     match key.code {
-        KeyCode::Char('q') => return true,
+        KeyCode::Char('q') if app.picked.is_none() => return true,
+        KeyCode::Enter
+            if app.page == PAGE_MODULES && key.modifiers.contains(KeyModifiers::SHIFT) =>
+        {
+            pick_module(app);
+        }
+        KeyCode::Char('m') if app.page == PAGE_MODULES => {
+            if app.picked.is_some() {
+                drop_pick(app);
+            } else {
+                pick_module(app);
+            }
+        }
         KeyCode::Tab | KeyCode::Char('l') | KeyCode::Right => {
             app.page = (app.page + 1) % PAGE_TITLES.len();
         }
@@ -85,6 +123,24 @@ pub fn handle(app: &mut App, key: KeyEvent) -> bool {
                     .unwrap_or_default(),
             });
         }
+        KeyCode::Char('e') if app.page == PAGE_GLYPHS && app.cursors[PAGE_GLYPHS] == 5 => {
+            app.edit = Some(Edit {
+                target: EditTarget::Pool,
+                text: app.cfg.glyph_pool().to_string(),
+            });
+        }
+        KeyCode::Char('e') if app.page == PAGE_GLYPHS => {
+            let cursor = app.cursors[PAGE_GLYPHS];
+            app.edit = Some(Edit {
+                target: EditTarget::Glyph(cursor),
+                text: app.glyph_spec(cursor),
+            });
+        }
+        KeyCode::Char('g') if app.page == PAGE_GLYPHS => {
+            let cursor = app.cursors[PAGE_GLYPHS];
+            app.open_glyph_source(if cursor == 5 { None } else { Some(cursor) });
+        }
+        KeyCode::Char('G') if app.page == PAGE_GLYPHS => app.open_glyph_source(None),
         KeyCode::Char('a') if app.page == PAGE_ARTWORK => {
             app.edit = Some(Edit {
                 target: EditTarget::Photo,
@@ -135,6 +191,55 @@ fn toggle_module(app: &mut App) {
     let len = list.len();
     app.dirty = true;
     app.status = format!("modules {}/{}", len, crate::MODULES.len());
+}
+
+fn pick_module(app: &mut App) {
+    let Some((id, _)) = app.module_order().get(app.cursors[PAGE_MODULES]).copied() else {
+        return;
+    };
+    let list = app.enabled_list();
+    let Some(position) = list.iter().position(|item| item == id) else {
+        return;
+    };
+    app.picked = Some((id.to_string(), position));
+    app.dirty = true;
+    app.status = format!("moving {} — shift+enter drops, esc cancels", id);
+}
+
+fn drop_pick(app: &mut App) {
+    let Some((id, position)) = app.picked.take() else {
+        return;
+    };
+    app.status = format!("{} placed at {}", id, position + 1);
+}
+
+fn cancel_pick(app: &mut App) {
+    let Some((id, position)) = app.picked.take() else {
+        return;
+    };
+    let list = app.enabled_list();
+    if let Some(current) = list.iter().position(|item| *item == id) {
+        list.remove(current);
+        let target = position.min(list.len());
+        list.insert(target, id.clone());
+        app.cursors[PAGE_MODULES] = target;
+    }
+    app.status = format!("{} returned to {}", id, position + 1);
+}
+
+fn move_picked(app: &mut App, delta: i64) {
+    let Some((id, position)) = app.picked.clone() else {
+        return;
+    };
+    let list = app.enabled_list();
+    let target = position as i64 + delta;
+    if target < 0 || target >= list.len() as i64 {
+        return;
+    }
+    list.swap(position, target as usize);
+    app.picked = Some((id, target as usize));
+    app.cursors[PAGE_MODULES] = target as usize;
+    app.dirty = true;
 }
 
 fn move_module(app: &mut App, delta: i64) {
@@ -305,6 +410,7 @@ fn adjust_value(app: &mut App, delta: i64) {
                 cycle_choice(&mut app.cfg.variant, &["dark", "light"], &current, delta);
                 app.dirty = true;
                 app.rebuild_theme();
+                app.prune_rotation_set();
             } else if cursor == 2 {
                 let current = app.cfg.rotate_palette_mode().to_string();
                 cycle_choice(
@@ -375,19 +481,14 @@ fn activate(app: &mut App) {
                 })
             }
             7 => app.open_picker(PickerKind::Font),
+            14 => app.open_picker(PickerKind::Quote),
             _ => adjust_value(app, 1),
         },
         PAGE_GLYPHS => {
             if cursor == 5 {
-                app.edit = Some(Edit {
-                    target: EditTarget::Pool,
-                    text: app.cfg.glyph_pool().to_string(),
-                });
+                app.open_glyph_source(None);
             } else {
-                app.edit = Some(Edit {
-                    target: EditTarget::Glyph(cursor),
-                    text: app.glyph_spec(cursor),
-                });
+                app.open_glyph_source(Some(cursor));
             }
         }
         PAGE_PALETTE => match cursor {
@@ -447,7 +548,14 @@ fn picker_key(app: &mut App, key: KeyEvent) {
     let Some(mut picker) = app.picker.take() else {
         return;
     };
-    if picker.kind == PickerKind::ThemeSet {
+    if matches!(picker.kind, PickerKind::Glyph(_) | PickerKind::GlyphPool)
+        && key.code == KeyCode::Char('f')
+        && key.modifiers.contains(KeyModifiers::CONTROL)
+    {
+        app.open_picker(PickerKind::GlyphFont);
+        return;
+    }
+    if matches!(picker.kind, PickerKind::ThemeSet | PickerKind::GlyphPool) {
         if let KeyCode::Char(' ') = key.code {
             let visible = picker.visible();
             if let Some(index) = visible.get(picker.cursor.min(visible.len().saturating_sub(1))) {
@@ -515,6 +623,26 @@ fn picker_key(app: &mut App, key: KeyEvent) {
 
 fn select_picker(app: &mut App, picker: &mut super::Picker) -> bool {
     match picker.kind {
+        PickerKind::GlyphPool => {
+            let chosen: String = picker
+                .items
+                .iter()
+                .filter(|item| item.checked)
+                .filter_map(|item| item.value.chars().next())
+                .collect();
+            let mut pool = app.cfg.glyph_pool().to_string();
+            let mut added = 0usize;
+            for ch in chosen.chars() {
+                if !pool.contains(ch) && pool.chars().count() < 512 {
+                    pool.push(ch);
+                    added += 1;
+                }
+            }
+            app.cfg.glyph_pool = Some(pool);
+            app.dirty = true;
+            app.status = format!("{} glyph(s) added to the pool", added);
+            true
+        }
         PickerKind::ThemeSet => {
             let chosen: Vec<String> = picker
                 .items
@@ -581,6 +709,51 @@ fn select_picker(app: &mut App, picker: &mut super::Picker) -> bool {
                     app.dirty = true;
                     app.reload_artwork();
                 }
+                PickerKind::Quote => {
+                    match item.value.as_str() {
+                        "@random" => {
+                            app.cfg.quote = None;
+                            app.status = "quote random".to_string();
+                        }
+                        "@off" => {
+                            app.cfg.quote = Some("off".to_string());
+                            app.status = "quote off".to_string();
+                        }
+                        "@custom" => {
+                            app.edit = Some(Edit {
+                                target: EditTarget::Quote,
+                                text: app
+                                    .cfg
+                                    .quote
+                                    .clone()
+                                    .filter(|q| q != "off")
+                                    .unwrap_or_default(),
+                            });
+                            app.refresh_quote();
+                            return true;
+                        }
+                        quote => {
+                            app.cfg.quote = Some(quote.to_string());
+                            app.status = "quote pinned".to_string();
+                        }
+                    }
+                    app.refresh_quote();
+                    app.dirty = true;
+                }
+                PickerKind::GlyphFont => {
+                    let Some(path) = crate::font::resolve_font(&item.value) else {
+                        app.status = "font not resolvable".to_string();
+                        return true;
+                    };
+                    app.load_glyph_source(item.label.clone(), path);
+                }
+                PickerKind::Glyph(row) => match app.set_glyph_spec(row, &item.value) {
+                    Ok(()) => {
+                        app.status = format!("glyph {} pinned", item.value);
+                    }
+                    Err(error) => app.status = error,
+                },
+                PickerKind::GlyphPool => {}
                 PickerKind::ThemeSet => {}
             }
             true
@@ -642,7 +815,8 @@ fn copy_palette(app: &mut App) {
 }
 
 fn cycle_theme(app: &mut App, delta: i64) {
-    let names = app.palette_names();
+    let mode = app.effective_mode();
+    let names = app.themes_for_mode(&mode);
     if names.is_empty() {
         return;
     }
@@ -704,6 +878,16 @@ fn edit_key(app: &mut App, key: KeyEvent) {
         KeyCode::Enter => {
             let text = edit.text.trim().to_string();
             match edit.target {
+                EditTarget::Quote => {
+                    app.cfg.quote = if text.is_empty() || text == "random" {
+                        None
+                    } else {
+                        Some(text)
+                    };
+                    app.refresh_quote();
+                    app.dirty = true;
+                    app.status = "quote updated".to_string();
+                }
                 EditTarget::LogoText => {
                     app.cfg.logo_text = if text.is_empty() { None } else { Some(text) };
                     app.dirty = true;

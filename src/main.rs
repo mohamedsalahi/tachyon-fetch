@@ -18,16 +18,57 @@ pub use config::{Config, Palette, Rgb};
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const FALLBACK_QUOTES: &[&str] = &[
-    "Precision is a form of mercy.",
-    "Calm is a decision, not a state.",
-    "The instrument does not care; the pilot does.",
-    "Read twice, cut once, then verify.",
-    "Slow is smooth; smooth is fast.",
-    "A cold system is a kind system.",
-    "Own the tool or serve it.",
-    "Simplify until it hurts, then stop.",
-    "Signal over noise, always.",
-    "The checklist is the shortcut.",
+    "“Nature, to be commanded, must be obeyed.” — Francis Bacon",
+    "“Philosophy is written in this grand book—the universe—which stands continually open to our gaze. It is written in the language of mathematics, and its characters are triangles, circles, and other geometrical figures.” — Galileo Galilei",
+    "“To explain all nature is too difficult a task for any one man or even for any one age.” — Isaac Newton",
+    "“It is of great advantage to the student of any subject to read the original memoirs on that subject, for science is always most completely assimilated when it is in the nascent state…” — James Clerk Maxwell",
+    "“There is grandeur in this view of life…from so simple a beginning endless forms most beautiful and most wonderful have been, and are being evolved.” — Charles Darwin",
+    "“In the distant future I see open fields for far more important researches.” — Charles Darwin",
+    "“The errors which arise from the absence of facts are far more numerous and durable than those which result from unsound reasoning respecting true data.” — Charles Babbage",
+    "“We may say most aptly that the Analytical Engine weaves algebraical patterns just as the Jacquard-loom weaves flowers and leaves.” — Ada Lovelace",
+    "“The Analytical Engine has no pretensions whatever to originate anything. It can do whatever we know how to order it to perform.” — Ada Lovelace",
+    "“In almost every computation, a great variety of arrangements for the succession of the processes is possible.” — Ada Lovelace",
+    "“The present is theirs; the future, for which I really worked, is mine.” — Nikola Tesla",
+    "“A new idea must not be judged by its immediate results.” — Nikola Tesla",
+    "“Earth is the cradle of humanity, but one cannot live in a cradle forever.” — Konstantin Tsiolkovsky",
+    "“The scientist does not study nature because it is useful; he studies it because he delights in it, and he delights in it because it is beautiful.” — Henri Poincaré",
+    "“To doubt everything or to believe everything are two equally convenient solutions; both dispense with the necessity of reflection.” — Henri Poincaré",
+    "“Mathematics is the art of giving the same name to different things.” — Henri Poincaré",
+    "“Music is the pleasure the human mind experiences from counting without being aware that it is counting.” — Gottfried Wilhelm Leibniz",
+    "“The eternal silence of these infinite spaces frightens me.” — Blaise Pascal",
+    "“We must know. We will know.” — David Hilbert",
+    "“Mathematics, rightly viewed, possesses not only truth, but supreme beauty…” — Bertrand Russell",
+    "“The good life is one inspired by love and guided by knowledge.” — Bertrand Russell",
+    "“A mathematician, like a painter or poet, is a maker of patterns; the mathematician’s patterns, like the painter’s or poet’s, must be beautiful.” — G. H. Hardy",
+    "“Either mathematics is too big for the human mind, or the human mind is more than a machine.” — Kurt Gödel",
+    "“The beauty of mathematics only shows itself to more patient followers.” — Maryam Mirzakhani",
+    "“There is always a vast field left to experimentation and I hope that we may have some beautiful progress in the following years.” — Marie Curie",
+    "“The eternal mystery of the world is its comprehensibility.” — Albert Einstein",
+    "“The most beautiful experience we can have is the mysterious.” — Albert Einstein",
+    "“The entire range of living matter on Earth…could be regarded as constituting a single living entity.” — James Lovelock",
+    "“What we observe is not nature itself, but nature exposed to our method of questioning.” — Werner Heisenberg",
+    "“The opposite of a profound truth may well be another profound truth.” — Niels Bohr",
+    "“It is more important to have beauty in one’s equations than to have them fit experiment.” — Paul Dirac",
+    "“Mathematics is the tool specially suited for dealing with abstract concepts of any kind and there is no limit to its power in this field.” — Paul Dirac",
+    "“My own suspicion is that the universe is not only queerer than we suppose, but queerer than we can suppose.” — J. B. S. Haldane",
+    "“The first principle is that you must not fool yourself—and you are the easiest person to fool.” — Richard Feynman",
+    "“Nature uses only the longest threads to weave her patterns, so each small piece of her fabric reveals the organization of the entire tapestry.” — Richard Feynman",
+    "“Equipped with his five senses, man explores the universe around him and calls the adventure Science.” — Edwin Hubble",
+    "“We are a way for the cosmos to know itself.” — Carl Sagan",
+    "“Look again at that dot. That’s here. That’s home. That’s us.” — Carl Sagan",
+    "“Everything that is not forbidden by laws of nature is achievable, given the right knowledge.” — David Deutsch",
+    "“The first ultraintelligent machine is the last invention that man need ever make.” — Irving John Good",
+    "“When we try to pick out anything by itself, we find it hitched to everything else in the universe.” — John Muir",
+    "“Ascribing mental qualities like beliefs, intentions and wants to a machine is sometimes correct if done conservatively…” — John McCarthy",
+    "“Will robots inherit the earth? Yes, but they will be our children.” — Marvin Minsky",
+    "“A useful intellectual tool puts the human up where he can see what is going on and can point the direction to move next.” — Douglas Engelbart",
+    "“You can’t think about thinking without thinking about thinking about something.” — Seymour Papert",
+    "“Computer programming is an art…because it produces objects of beauty.” — Donald Knuth",
+    "“We had to find a way, and we did.” — Margaret Hamilton",
+    "“In nature nothing exists alone.” — Rachel Carson",
+    "“Nature has introduced great variety into the landscape, but man has displayed a passion for simplifying it.” — Rachel Carson",
+    "“Controlling complexity is the essence of computer programming.” — Brian Kernighan",
+    "“The only way of discovering the limits of the possible is to venture a little way past them into the impossible.” — Arthur C. Clarke",
 ];
 
 #[repr(C)]
@@ -603,6 +644,54 @@ pub fn palette_rows(opts: &Opts) -> Vec<(String, String, Palette, String, String
     rows
 }
 
+pub fn theme_availability(
+    rows: &[(String, String, Palette, String, String)],
+) -> Vec<(String, bool, bool)> {
+    let mut names: Vec<String> = Vec::new();
+    for (name, _, _, _, _) in rows {
+        if !names.contains(name) {
+            names.push(name.clone());
+        }
+    }
+    names
+        .into_iter()
+        .map(|name| {
+            let dark = rows
+                .iter()
+                .find(|(row, variant, _, _, _)| row == &name && variant == "dark")
+                .map(|(_, _, palette, _, _)| *palette);
+            let light = rows
+                .iter()
+                .find(|(row, variant, _, _, _)| row == &name && variant == "light")
+                .map(|(_, _, palette, _, _)| *palette);
+            let has_dark = dark.is_some();
+            let has_light = match (dark, light) {
+                (Some(dark), Some(light)) => dark != light,
+                (None, Some(_)) => true,
+                _ => false,
+            };
+            (name, has_dark, has_light)
+        })
+        .collect()
+}
+
+pub fn valid_themes(
+    rows: &[(String, String, Palette, String, String)],
+    mode: &str,
+    wanted: &[String],
+) -> Vec<String> {
+    let availability = theme_availability(rows);
+    wanted
+        .iter()
+        .filter(|name| {
+            availability.iter().any(|(known, dark, light)| {
+                known == *name && if mode == "light" { *light } else { *dark }
+            })
+        })
+        .cloned()
+        .collect()
+}
+
 pub fn theme_names(opts: &Opts) -> Vec<String> {
     let mut names: Vec<String> = Vec::new();
     for (name, _, _, _, _) in palette_rows(opts) {
@@ -628,6 +717,20 @@ fn load_quotes(path: &Path) -> Vec<String> {
         quotes = FALLBACK_QUOTES.iter().map(|s| s.to_string()).collect();
     }
     quotes
+}
+
+pub fn resolve_quote(config: &Config, quotes: &[String], rng: &mut u64) -> String {
+    match config.quote.as_deref() {
+        Some("off") | Some("none") => String::new(),
+        Some(value) => value.to_string(),
+        None => {
+            if quotes.is_empty() {
+                String::new()
+            } else {
+                quotes[(next_rand(rng) % quotes.len() as u64) as usize].clone()
+            }
+        }
+    }
 }
 
 fn next_rand(state: &mut u64) -> u64 {
@@ -2136,14 +2239,18 @@ fn main() {
         .as_deref()
         .map(|album| album_images(album).len())
         .filter(|len| *len > 0);
-    let known_themes = theme_names(&opts);
-    let rotation_themes: Vec<String> = config
-        .rotate_themes
+    let rows = palette_rows(&opts);
+    let mode = opts
+        .variant
         .clone()
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|name| known_themes.contains(name))
-        .collect();
+        .or_else(|| config.variant.clone())
+        .or_else(|| read_state(&state_path(&opts)).1)
+        .unwrap_or_else(|| "dark".to_string());
+    let rotation_themes = valid_themes(
+        &rows,
+        &mode,
+        &config.rotate_themes.clone().unwrap_or_default(),
+    );
     let rotation = rotate::compute(
         &config,
         rotate::load_state(&rotation_path(&opts)),
@@ -2191,11 +2298,7 @@ fn main() {
     });
 
     let quotes = load_quotes(&quotes_path(&opts));
-    let quote = if quotes.is_empty() {
-        String::new()
-    } else {
-        quotes[(next_rand(&mut rng) % quotes.len() as u64) as usize].clone()
-    };
+    let quote = resolve_quote(&config, &quotes, &mut rng);
     let glyph_seed = next_rand(&mut rng);
     let title_variant = next_rand(&mut rng).is_multiple_of(2);
 
@@ -2475,6 +2578,56 @@ mod tests {
         assert_eq!(sections.core[0].id, "memory");
         assert_eq!(sections.core[1].id, "swap");
         assert!(sections.system.is_empty());
+    }
+
+    #[test]
+    fn fallback_quotes_keep_the_full_attributed_pool() {
+        assert_eq!(FALLBACK_QUOTES.len(), 51);
+        for quote in FALLBACK_QUOTES {
+            assert!(quote.starts_with('“'), "missing opening quote: {quote}");
+            assert!(quote.contains("” — "), "missing attribution: {quote}");
+        }
+    }
+
+    #[test]
+    fn theme_variant_availability_is_honest() {
+        let opts = Opts {
+            demo: true,
+            palettes: Some(PathBuf::from("/nonexistent-palettes.tsv")),
+            ..Opts::default()
+        };
+        let rows = palette_rows(&opts);
+        let availability = theme_availability(&rows);
+        let find = |name: &str| {
+            availability
+                .iter()
+                .find(|(theme, _, _)| theme == name)
+                .map(|(_, dark, light)| (*dark, *light))
+                .unwrap()
+        };
+        assert_eq!(find("Solitude"), (true, false));
+        assert_eq!(find("Vantablack"), (true, false));
+        assert_eq!(find("Hackerman"), (true, false));
+        assert_eq!(find("Retro 82"), (true, false));
+        assert_eq!(find("Rose Pine"), (true, true));
+        assert_eq!(find("Flexoki Light"), (true, true));
+        let wanted = vec!["Hackerman".to_string(), "Rose Pine".to_string()];
+        assert_eq!(
+            valid_themes(&rows, "light", &wanted),
+            vec!["Rose Pine".to_string()]
+        );
+        assert_eq!(valid_themes(&rows, "dark", &wanted), wanted);
+        let mut rng = 7u64;
+        let quotes = vec!["one".to_string(), "two".to_string()];
+        let mut config = Config::default();
+        assert!(!resolve_quote(&config, &quotes, &mut rng).is_empty());
+        config.quote = Some("off".to_string());
+        assert!(resolve_quote(&config, &quotes, &mut rng).is_empty());
+        config.quote = Some("pinned — Someone".to_string());
+        assert_eq!(
+            resolve_quote(&config, &quotes, &mut rng),
+            "pinned — Someone".to_string()
+        );
     }
 
     #[test]

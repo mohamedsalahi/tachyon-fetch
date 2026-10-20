@@ -269,6 +269,7 @@ pub const BUILTIN_THEMES: &[BuiltinTheme] = &[
 #[derive(Default, Clone, PartialEq, Debug)]
 pub struct Config {
     pub enabled: Option<Vec<String>>,
+    pub quote: Option<String>,
     pub glyph: Option<String>,
     pub album: Option<String>,
     pub image: Option<PathBuf>,
@@ -382,7 +383,7 @@ impl Config {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Palette {
     pub bg: Rgb,
     pub fg: Rgb,
@@ -419,6 +420,7 @@ enum Place {
 fn place_of(key: &str) -> Option<(Place, &str)> {
     const FLAT: &[&str] = &[
         "enabled",
+        "quote",
         "glyph",
         "album",
         "image",
@@ -556,6 +558,13 @@ pub fn load_config(path: &Path) -> Config {
                         )
                     };
                 }
+                (Place::Flat, "quote") => {
+                    config.quote = if value.is_empty() || value == "random" {
+                        None
+                    } else {
+                        Some(value.to_string())
+                    }
+                }
                 (Place::Flat, "glyph") if !value.is_empty() => {
                     config.glyph = Some(value.to_string())
                 }
@@ -678,6 +687,7 @@ fn flat_lines(config: &Config) -> Vec<(String, String)> {
             }
         }),
     );
+    push("quote", config.quote.clone());
     push("glyph", config.glyph.clone());
     push("album", config.album.clone());
     push(
@@ -1065,7 +1075,7 @@ mod tests {
             "# deck\n\
              glyph = ◆\n\
              logo_mode = text\n\
-             logo_text = SALAHY\n\
+             logo_text = SALAHY\n            quote = “We must know. We will know.” — David Hilbert\n             quote = “We must know. We will know.” — David Hilbert\n\
              glyph.memory = ⬢\n\
              [glyphs]\n\
              row = random\n\
@@ -1080,6 +1090,10 @@ mod tests {
         assert_eq!(config.glyph.as_deref(), Some("◆"));
         assert_eq!(config.logo_mode(), "text");
         assert_eq!(config.logo_text.as_deref(), Some("SALAHY"));
+        assert_eq!(
+            config.quote.as_deref(),
+            Some("“We must know. We will know.” — David Hilbert")
+        );
         assert_eq!(config.glyphs.get("memory").map(String::as_str), Some("⬢"));
         assert_eq!(config.glyphs.get("swap").map(String::as_str), Some("✦"));
         assert_eq!(config.glyph_row_mode(), "random");

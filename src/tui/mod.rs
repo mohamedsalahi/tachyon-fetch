@@ -4,7 +4,10 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use ratatui::backend::CrosstermBackend;
-use ratatui::crossterm::event::{self, Event, KeyEventKind};
+use ratatui::crossterm::event::{
+    self, Event, KeyEventKind, KeyboardEnhancementFlags, PopKeyboardEnhancementFlags,
+    PushKeyboardEnhancementFlags,
+};
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
@@ -37,7 +40,7 @@ pub const PAGE_ARTWORK: usize = 5;
 pub const PAGE_PREVIEW: usize = 6;
 pub const PAGE_KEYS: usize = 7;
 
-pub const DECK_ROWS: usize = 14;
+pub const DECK_ROWS: usize = 15;
 pub const GLYPH_FIXED_ROWS: usize = 6;
 pub const PALETTE_ROWS: usize = 13;
 pub const ARTWORK_ROWS: usize = 4;
@@ -59,6 +62,7 @@ pub enum EditTarget {
     Photo,
     LogoText,
     Pool,
+    Quote,
 }
 
 pub struct Edit {
@@ -73,6 +77,10 @@ pub enum PickerKind {
     Album,
     Photo,
     ThemeSet,
+    Quote,
+    GlyphFont,
+    Glyph(usize),
+    GlyphPool,
 }
 
 #[derive(Clone)]
@@ -93,10 +101,19 @@ pub struct Picker {
 impl Picker {
     pub fn visible(&self) -> Vec<usize> {
         let needle = self.filter.to_lowercase();
+        let alias = needle.strip_prefix("nf-").map(str::to_string);
+        let glyphs = matches!(self.kind, PickerKind::Glyph(_) | PickerKind::GlyphPool);
         self.items
             .iter()
             .enumerate()
-            .filter(|(_, item)| needle.is_empty() || item.label.to_lowercase().contains(&needle))
+            .filter(|(_, item)| {
+                if needle.is_empty() {
+                    return true;
+                }
+                let label = item.label.to_lowercase();
+                label.contains(&needle)
+                    || (glyphs && alias.as_ref().is_some_and(|alias| label.contains(alias)))
+            })
             .map(|(index, _)| index)
             .collect()
     }
@@ -118,6 +135,7 @@ pub struct App<'a> {
     pub cursors: [usize; 8],
     pub data: FetchData,
     pub quote: String,
+    pub quotes: Vec<String>,
     pub demo: bool,
     pub status: String,
     pub dirty: bool,
@@ -132,6 +150,10 @@ pub struct App<'a> {
     pub artwork_pane: Option<ratatui::layout::Rect>,
     pub reset: Option<ResetPrompt>,
     pub glyph_seed: u64,
+    pub glyph_source: Option<Vec<crate::font::FontGlyph>>,
+    pub glyph_font: Option<String>,
+    pub glyph_target: Option<usize>,
+    pub picked: Option<(String, usize)>,
     placed: Option<(PathBuf, u16, u16, u16, u16)>,
     rng: u64,
 }
@@ -152,7 +174,6 @@ impl<'a> App<'a> {
             crate::collect_data(&cfg)
         };
         let quotes = crate::load_quotes(&crate::quotes_path(opts));
-        let quote = quotes.first().cloned().unwrap_or_default();
         let seed = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|duration| duration.as_nanos() as u64)
@@ -166,7 +187,8 @@ impl<'a> App<'a> {
             page: 0,
             cursors: [0; 8],
             data,
-            quote,
+            quote: String::new(),
+            quotes,
             demo,
             status: format!("config {}", crate::config_path(opts).display()),
             dirty: false,
@@ -181,11 +203,21 @@ impl<'a> App<'a> {
             artwork_pane: None,
             reset: None,
             glyph_seed: seed,
+            glyph_source: None,
+            glyph_font: None,
+            glyph_target: None,
+            picked: None,
             placed: None,
             rng: seed,
         };
+        app.refresh_quote();
         app.refresh();
+        app.prune_rotation_set();
         app
+    }
+
+    pub fn refresh_quote(&mut self) {
+        self.quote = crate::resolve_quote(&self.cfg, &self.quotes, &mut self.rng);
     }
 
     pub fn refresh(&mut self) {
@@ -220,6 +252,33 @@ impl<'a> App<'a> {
 
     pub fn rebuild_theme(&mut self) {
         self.theme = crate::load_theme(self.opts, &self.cfg);
+    }
+
+    pub fn effective_mode(&self) -> String {
+        self.cfg
+            .variant
+            .clone()
+            .unwrap_or_else(|| self.theme.mode.clone())
+    }
+
+    pub fn themes_for_mode(&self, mode: &str) -> Vec<String> {
+        crate::theme_availability(&self.palettes)
+            .into_iter()
+            .filter(|(_, dark, light)| if mode == "light" { *light } else { *dark })
+            .map(|(name, _, _)| name)
+            .collect()
+    }
+
+    pub fn prune_rotation_set(&mut self) {
+        let Some(set) = self.cfg.rotate_themes.clone() else {
+            return;
+        };
+        let valid = crate::valid_themes(&self.palettes, &self.effective_mode(), &set);
+        if valid.len() != set.len() {
+            let removed = set.len() - valid.len();
+            self.cfg.rotate_themes = if valid.is_empty() { None } else { Some(valid) };
+            self.status = format!("{} theme(s) removed from the rotation set", removed);
+        }
     }
 
     pub fn palette_names(&self) -> Vec<String> {
@@ -388,7 +447,7 @@ impl<'a> App<'a> {
             if value.is_empty() {
                 return Err("pool cannot be empty".to_string());
             }
-            self.cfg.glyph_pool = Some(value.chars().take(64).collect());
+            self.cfg.glyph_pool = Some(value.chars().take(512).collect());
             self.dirty = true;
             return Ok(());
         }
@@ -481,25 +540,115 @@ impl<'a> App<'a> {
         }
     }
 
+    fn font_items(&self) -> (String, Vec<PickerItem>) {
+        let fonts = crate::font::list_system_fonts();
+        (
+            format!("font · {} families", fonts.len()),
+            fonts
+                .into_iter()
+                .map(|family| PickerItem {
+                    label: family.clone(),
+                    value: family,
+                    checked: false,
+                })
+                .collect(),
+        )
+    }
+
+    pub fn open_glyph_source(&mut self, target: Option<usize>) {
+        self.glyph_target = target;
+        self.glyph_font = None;
+        let preferred = [
+            "JetBrainsMono Nerd Font",
+            "Symbols Nerd Font",
+            "Symbols Nerd Font Mono",
+        ];
+        let mut source: Option<(String, std::path::PathBuf)> =
+            preferred.iter().find_map(|family| {
+                crate::font::resolve_font(family).map(|path| (family.to_string(), path))
+            });
+        if source.is_none() {
+            source = crate::font::list_system_fonts()
+                .into_iter()
+                .find(|family| family.to_lowercase().contains("nerd font"))
+                .and_then(|family| crate::font::resolve_font(&family).map(|path| (family, path)));
+        }
+        match source {
+            Some((family, path)) => self.load_glyph_source(family, path),
+            None => self.open_picker(PickerKind::GlyphFont),
+        }
+    }
+
+    pub fn load_glyph_source(&mut self, family: String, path: std::path::PathBuf) {
+        let glyphs = crate::font::font_glyphs(&path);
+        if glyphs.is_empty() {
+            self.status = format!("{} has no readable glyphs", family);
+            self.open_picker(PickerKind::GlyphFont);
+            return;
+        }
+        self.status = format!("{} · {} glyphs", family, glyphs.len());
+        self.glyph_source = Some(glyphs);
+        self.glyph_font = Some(family);
+        match self.glyph_target {
+            Some(row) => self.open_picker(PickerKind::Glyph(row)),
+            None => self.open_picker(PickerKind::GlyphPool),
+        }
+    }
+
     pub fn open_picker(&mut self, kind: PickerKind) {
         let (title, items): (String, Vec<PickerItem>) = match kind {
-            PickerKind::Font => {
-                let fonts = crate::font::list_system_fonts();
+            PickerKind::Font => self.font_items(),
+            PickerKind::GlyphFont => {
+                let (title, items) = self.font_items();
+                (format!("glyph source · {}", title), items)
+            }
+            PickerKind::Glyph(row) => {
+                let Some(glyphs) = &self.glyph_source else {
+                    self.status = "pick a glyph source font first".to_string();
+                    return;
+                };
                 (
-                    format!("font · {} families", fonts.len()),
-                    fonts
-                        .into_iter()
-                        .map(|family| PickerItem {
-                            label: family.clone(),
-                            value: family,
+                    format!(
+                        "glyph · {} · {} · {}",
+                        self.glyph_font.as_deref().unwrap_or("font"),
+                        glyphs.len(),
+                        self.glyph_label(row)
+                    ),
+                    glyphs
+                        .iter()
+                        .map(|glyph| PickerItem {
+                            label: crate::font::glyph_label(glyph),
+                            value: glyph.ch.to_string(),
                             checked: false,
                         })
                         .collect(),
                 )
             }
+            PickerKind::GlyphPool => {
+                let Some(glyphs) = &self.glyph_source else {
+                    self.status = "pick a glyph source font first".to_string();
+                    return;
+                };
+                let pool = self.cfg.glyph_pool().to_string();
+                (
+                    format!(
+                        "pool · {} · {} glyphs",
+                        self.glyph_font.as_deref().unwrap_or("font"),
+                        glyphs.len()
+                    ),
+                    glyphs
+                        .iter()
+                        .map(|glyph| PickerItem {
+                            label: crate::font::glyph_label(glyph),
+                            value: glyph.ch.to_string(),
+                            checked: pool.contains(glyph.ch),
+                        })
+                        .collect(),
+                )
+            }
             PickerKind::Theme => (
-                "theme".to_string(),
-                self.palette_names()
+                format!("theme · {} mode", self.effective_mode()),
+                self.themes_for_mode(&self.effective_mode())
                     .into_iter()
                     .map(|name| PickerItem {
                         label: name.clone(),
@@ -548,11 +697,36 @@ impl<'a> App<'a> {
                     items,
                 )
             }
+            PickerKind::Quote => {
+                let mut items = vec![
+                    PickerItem {
+                        label: "↻ random".to_string(),
+                        value: "@random".to_string(),
+                        checked: false,
+                    },
+                    PickerItem {
+                        label: "off".to_string(),
+                        value: "@off".to_string(),
+                        checked: false,
+                    },
+                    PickerItem {
+                        label: "— custom —".to_string(),
+                        value: "@custom".to_string(),
+                        checked: false,
+                    },
+                ];
+                items.extend(self.quotes.iter().map(|quote| PickerItem {
+                    label: quote.clone(),
+                    value: quote.clone(),
+                    checked: false,
+                }));
+                ("quotes".to_string(), items)
+            }
             PickerKind::ThemeSet => {
                 let chosen = self.cfg.rotate_themes.clone().unwrap_or_default();
                 (
                     "rotation set · space marks".to_string(),
-                    self.palette_names()
+                    self.themes_for_mode(&self.effective_mode())
                         .into_iter()
                         .map(|name| {
                             let checked = chosen.iter().any(|item| item == &name);
@@ -617,7 +791,8 @@ impl<'a> App<'a> {
                     10 => self.cfg.logo_width = None,
                     11 => self.cfg.logo_min = None,
                     12 => self.cfg.logo_max = None,
-                    _ => self.cfg.logo_gap = None,
+                    13 => self.cfg.logo_gap = None,
+                    _ => self.cfg.quote = None,
                 }
                 self.refresh();
                 self.dirty = true;
@@ -707,6 +882,8 @@ impl<'a> App<'a> {
                 self.cfg.logo_min = None;
                 self.cfg.logo_max = None;
                 self.cfg.logo_gap = None;
+                self.cfg.quote = None;
+                self.refresh_quote();
                 self.refresh();
             }
             PAGE_GLYPHS => {
@@ -775,7 +952,14 @@ pub fn run(opts: &Opts, base: &Config) -> io::Result<()> {
     let mut app = App::new(opts, base);
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
+    execute!(
+        stdout,
+        EnterAlternateScreen,
+        PushKeyboardEnhancementFlags(
+            KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+                | KeyboardEnhancementFlags::REPORT_ALTERNATE_KEYS
+        )
+    )?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
     terminal.clear()?;
@@ -826,7 +1010,11 @@ pub fn run(opts: &Opts, base: &Config) -> io::Result<()> {
         let _ = out.flush();
     }
     disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    execute!(
+        terminal.backend_mut(),
+        PopKeyboardEnhancementFlags,
+        LeaveAlternateScreen
+    )?;
     terminal.show_cursor()?;
     outcome
 }
@@ -1053,6 +1241,72 @@ mod tests {
         assert_eq!(order[0].0, "memory");
         assert_eq!(order[1].0, "os");
         assert_eq!(order.len(), crate::MODULES.len());
+    }
+
+    #[test]
+    fn picker_scrolls_the_selected_item_into_view() {
+        let opts = demo_opts();
+        let mut app = App::new(&opts, &Config::default());
+        let items = (0..120)
+            .map(|index| PickerItem {
+                label: format!("item {:03}", index),
+                value: index.to_string(),
+                checked: false,
+            })
+            .collect();
+        app.picker = Some(Picker {
+            kind: PickerKind::Font,
+            title: "scroll".to_string(),
+            items,
+            filter: String::new(),
+            cursor: 119,
+        });
+        let mut terminal =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(150, 40)).expect("terminal");
+        terminal
+            .draw(|frame| view::draw(frame, &mut app))
+            .expect("draw");
+        let buffer = terminal.backend().buffer();
+        let mut text = String::new();
+        for y in 0..buffer.area.height {
+            for x in 0..buffer.area.width {
+                text.push_str(buffer.cell((x, y)).map(|cell| cell.symbol()).unwrap_or(" "));
+            }
+            text.push('\n');
+        }
+        assert!(
+            text.contains("item 119"),
+            "selected item must be visible:\n{}",
+            text
+        );
+    }
+
+    #[test]
+    fn shift_enter_picks_up_and_drops_modules() {
+        use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        let opts = demo_opts();
+        let base = Config {
+            enabled: Some(vec![
+                "os".to_string(),
+                "host".to_string(),
+                "kernel".to_string(),
+            ]),
+            ..Config::default()
+        };
+        let mut app = App::new(&opts, &base);
+        app.page = PAGE_MODULES;
+        app.cursors[PAGE_MODULES] = 0;
+        input::handle(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::SHIFT));
+        assert_eq!(app.picked.as_ref().map(|(id, _)| id.as_str()), Some("os"));
+        input::handle(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE),
+        );
+        let order = app.cfg.enabled.clone().unwrap();
+        assert_eq!(order[..2], ["host".to_string(), "os".to_string()]);
+        input::handle(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::SHIFT));
+        assert!(app.picked.is_none());
+        assert!(app.dirty);
     }
 
     #[test]

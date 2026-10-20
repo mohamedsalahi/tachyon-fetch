@@ -47,8 +47,9 @@ It is designed for people who want the truth about their systems at a glance —
 | **Palette engine** | six built-in themes (Solitude, Vantablack, Hackerman, Retro 82, Rose Pine, Flexoki Light) plus a TSV table and the active theme state |
 | **Text logo** | any system font rendered as braille art with a two-tone tint — no image protocol needed |
 | **Image logo** | kitty graphics protocol with placement that never reflows text |
-| **Glyph system** | one mapped glyph for every fetched object; pin it, randomize it, or draw it from a custom pool; per-section glyphs too |
-| **Rotation** | artwork and palette rotation with `off · next · shuffle`, a chosen theme set, and `run · hour · day` cadence |
+| **Glyph system** | one mapped glyph for every fetched object; pin it, randomize it, or draw it from a custom pool; per-section glyphs; browse any installed font and take a glyph or build a pool from it |
+| **Quote bench** | 51 attributed lines (Bacon to Clarke); random, off, or pinned, with a filterable picker |
+| **Rotation** | artwork and palette rotation with `off · next · shuffle`, a chosen theme set, and `run · hour · day` cadence; only themes with a genuine variant for the active mode can be picked or pooled |
 | **Album flow** | `$XDG_DATA_HOME/tachyon/albums/<name>/*.png`, browsed album-first in the configurator |
 | **Image ingest** | JPEG/PNG conversion inside the binary — no ImageMagick, no shell |
 | **Threshold colour** | capture warns once a metric actually means something |
@@ -115,7 +116,7 @@ Battery health  96%
 CPU temp        58 °C
 GPU temp        52 °C
 
-NOTE  Simplify until it hurts, then stop.
+NOTE  “We must know. We will know.” — David Hilbert
 ```
 
 <br>
@@ -157,15 +158,17 @@ Eight pages, one engine: **Modules · Deck · Glyphs · Palette · Thresholds ·
 
 ```text
 h l / ← →      previous · next page space   toggle · pin/random · mark
-j k / ↑ ↓      move · scroll        enter   edit · open picker · apply
+j k / ↑ ↓      move · scroll        enter   glyph library · open picker · apply
 + -            adjust · cycle glyph J K     reorder the enabled modules
+shift+enter    pick a module up, move with j/k, drop (m works everywhere)
+e / g / G      type a glyph value · glyph library · pool from a font
 R              reset (setting · page · config)
 a              add photo            p       pin glyph · copy palette
 s              save                 r       randomize glyphs · refresh
 q / ctrl-c     quit
 ```
 
-The configurator is the whole config surface, not a subset. **Deck** edits composition, units, temperature, the logo mode, the logo text, and a font picker that lists every family fontconfig knows and renders the result live. **Glyphs** maps every fetched object individually, with pinned, random and auto modes, a custom pool, and per-section overrides. **Palette** picks from the built-in theme set or any installed palette table, edits RGB channels, and defines the rotation set. **Artwork** is album-first: choose an album, then choose a frame to pin or rotate through the whole album; rotation mode and cadence are editable in place. **Preview** renders the real readout, including the actual text logo, composed exactly as the fetch will print it. `R` resets the current setting, the whole page, or the entire config after confirmation. Comments and unknown keys in `fetch.conf` survive every save. Every change lands in `fetch.conf` on `s` — the same plain-text file the renderer consumes.
+The configurator is the whole config surface, not a subset. **Deck** edits composition, units, temperature, the quote setting, the logo mode, the logo text, and a font picker that lists every family fontconfig knows and renders the result live. **Glyphs** maps every fetched object individually with pinned, random and auto modes; `enter` on a glyph opens the Nerd Font glyph library directly (names and code points included; type a name or `nf-` alias to filter); `ctrl-f` switches the source font, so any installed font can supply the pinned glyph or a random pool. Per-section glyphs and a hand-editable pool sit alongside. **Palette** picks from the built-in themes or any installed palette table, edits RGB channels, and defines the rotation set; switching to light mode hides every theme without a real light variant and prunes it from the rotation set. **Artwork** is album-first: choose an album, then choose a frame to pin or rotate through the whole album; rotation mode and cadence are editable in place. **Preview** renders the real readout, including the actual text logo, composed exactly as the fetch will print it. `R` resets the current setting, the whole page, or the entire config after confirmation. Comments and unknown keys in `fetch.conf` survive every save. Every change lands in `fetch.conf` on `s` — the same plain-text file the renderer consumes.
 
 Pickers are filter-first: type to narrow, `↑`/`↓` to move, `enter` to take, `esc` to cancel. In the theme-set picker, `space` marks a theme and advances.
 
@@ -181,6 +184,7 @@ Built on [ratatui](https://ratatui.rs); nothing runs between frames.
 # only these modules render; omit the line for all of them
 enabled = os,host,kernel,uptime,session,cpu,memory,swap,disk_root,disk_media,gpu_util,gpu_vram,battery,cpu_temp,gpu_temp
 
+quote  = random       # random · off · a pinned line (full text)
 glyph  = ◆            # header glyph; random, or one character
 layout = hud
 motion = reveal
@@ -222,6 +226,7 @@ power  = ◆
 memory = ⬢             # pinned
 swap   = random        # drawn from the pool per run
 disk_root = auto       # the built-in map for this object
+# the pool can be typed here or built from any font in the configurator
 
 [rotate]
 art     = next         # off · next · shuffle
@@ -230,7 +235,7 @@ every   = run          # run · hour · day
 themes  = Solitude,Hackerman,Rose Pine
 ```
 
-Fonts are resolved through fontconfig (any installed TTF/OTF family); TTC collections are not rasterized. Rotation applies when the fetch runs — the configurator sets the rules and previews the pinned selection. Every key above is editable inside `--tui`; the file remains the authority. Glyph keys accept `auto` (the built-in map), `random` (from the pool), `off`, or a single character. `logo_mode = image` uses the kitty graphics protocol; `text` renders the word as braille art. Rotation requires a palette set and an album; an explicit `image` or `theme` wins over rotation for that run. Rotation cursors live in `$XDG_STATE_HOME/tachyon/rotation`, never in the config.
+Fonts are resolved through fontconfig (any installed TTF/OTF family; the glyph browser also reads TTC collections for their character maps, though the text-logo rasterizer skips them). The rotation set is filtered to themes that actually differ between dark and light — a duplicated dark row does not count as a light variant. Rotation applies when the fetch runs — the configurator sets the rules and previews the pinned selection. Every key above is editable inside `--tui`; the file remains the authority. Glyph keys accept `auto` (the built-in map), `random` (from the pool), `off`, or a single character. `logo_mode = image` uses the kitty graphics protocol; `text` renders the word as braille art. Rotation requires a palette set and an album; an explicit `image` or `theme` wins over rotation for that run. Rotation cursors live in `$XDG_STATE_HOME/tachyon/rotation`, never in the config.
 
 | Resource | Default |
 |---|---|
