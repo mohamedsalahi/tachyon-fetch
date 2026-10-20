@@ -270,6 +270,9 @@ pub const BUILTIN_THEMES: &[BuiltinTheme] = &[
 pub struct Config {
     pub enabled: Option<Vec<String>>,
     pub quote: Option<String>,
+    pub note_mode: Option<String>,
+    pub note_text: Option<String>,
+    pub emoticon: Option<String>,
     pub glyph: Option<String>,
     pub album: Option<String>,
     pub image: Option<PathBuf>,
@@ -334,6 +337,18 @@ impl Config {
 
     pub fn logo_mode(&self) -> &str {
         self.logo_mode.as_deref().unwrap_or("image")
+    }
+
+    pub fn note_mode(&self) -> &str {
+        if let Some(mode) = self.note_mode.as_deref() {
+            return mode;
+        }
+        match self.quote.as_deref() {
+            None | Some("random") => "quote",
+            Some("off") | Some("none") => "off",
+            Some(line) if line.contains(" — ") => "quote",
+            Some(_) => "text",
+        }
     }
 
     pub fn logo_size_px(&self) -> u8 {
@@ -421,6 +436,9 @@ fn place_of(key: &str) -> Option<(Place, &str)> {
     const FLAT: &[&str] = &[
         "enabled",
         "quote",
+        "note_mode",
+        "note_text",
+        "emoticon",
         "glyph",
         "album",
         "image",
@@ -565,6 +583,23 @@ pub fn load_config(path: &Path) -> Config {
                         Some(value.to_string())
                     }
                 }
+                (Place::Flat, "note_mode") => {
+                    config.note_mode = choice(value, &["quote", "text", "emoticon", "off"])
+                }
+                (Place::Flat, "note_text") => {
+                    config.note_text = if value.is_empty() {
+                        None
+                    } else {
+                        Some(value.to_string())
+                    }
+                }
+                (Place::Flat, "emoticon") => {
+                    config.emoticon = if value.is_empty() {
+                        None
+                    } else {
+                        Some(value.to_string())
+                    }
+                }
                 (Place::Flat, "glyph") if !value.is_empty() => {
                     config.glyph = Some(value.to_string())
                 }
@@ -688,6 +723,9 @@ fn flat_lines(config: &Config) -> Vec<(String, String)> {
         }),
     );
     push("quote", config.quote.clone());
+    push("note_mode", config.note_mode.clone());
+    push("note_text", config.note_text.clone());
+    push("emoticon", config.emoticon.clone());
     push("glyph", config.glyph.clone());
     push("album", config.album.clone());
     push(
@@ -1075,7 +1113,7 @@ mod tests {
             "# deck\n\
              glyph = ◆\n\
              logo_mode = text\n\
-             logo_text = SALAHY\n            quote = “We must know. We will know.” — David Hilbert\n             quote = “We must know. We will know.” — David Hilbert\n\
+             logo_text = SALAHY\n             quote = “We must know. We will know.” — David Hilbert\n\
              glyph.memory = ⬢\n\
              [glyphs]\n\
              row = random\n\

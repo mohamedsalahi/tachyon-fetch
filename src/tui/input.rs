@@ -4,7 +4,7 @@ use super::util::adjust;
 use super::{
     App, ColorEdit, Edit, EditTarget, PickerKind, ResetPrompt, ARTWORK_ROWS, DECK_ROWS,
     GLYPH_FIXED_ROWS, PAGE_ARTWORK, PAGE_DECK, PAGE_GLYPHS, PAGE_MODULES, PAGE_PALETTE,
-    PAGE_PREVIEW, PAGE_THRESHOLDS, PAGE_TITLES, PALETTE_ROWS, RULES,
+    PAGE_THRESHOLDS, PAGE_TITLES, PALETTE_ROWS, RULES,
 };
 
 pub fn handle(app: &mut App, key: KeyEvent) -> bool {
@@ -14,6 +14,23 @@ pub fn handle(app: &mut App, key: KeyEvent) -> bool {
     }
     if app.reset.is_some() {
         reset_key(app, key);
+        return false;
+    }
+    if app.preview {
+        match key.code {
+            KeyCode::Char('P') | KeyCode::Esc => {
+                app.preview = false;
+                app.scroll = 0;
+                app.status = "back to editing".to_string();
+            }
+            KeyCode::Char('j') | KeyCode::Down => app.scroll = app.scroll.saturating_add(1),
+            KeyCode::Char('k') | KeyCode::Up => app.scroll = app.scroll.saturating_sub(1),
+            KeyCode::PageDown => app.scroll = app.scroll.saturating_add(10),
+            KeyCode::PageUp => app.scroll = app.scroll.saturating_sub(10),
+            KeyCode::Char('g') => app.scroll = 0,
+            KeyCode::Char('G') => app.scroll = 999,
+            _ => {}
+        }
         return false;
     }
     if app.color_edit.is_some() {
@@ -75,8 +92,13 @@ pub fn handle(app: &mut App, key: KeyEvent) -> bool {
         KeyCode::BackTab | KeyCode::Char('h') | KeyCode::Left => {
             app.page = (app.page + PAGE_TITLES.len() - 1) % PAGE_TITLES.len();
         }
-        KeyCode::Char(value @ '1'..='8') => {
+        KeyCode::Char(value @ '1'..='7') => {
             app.page = value as usize - '1' as usize;
+        }
+        KeyCode::Char('P') => {
+            app.preview = true;
+            app.scroll = 0;
+            return false;
         }
         KeyCode::Char('s') => app.save(),
         KeyCode::Char('r') => {
@@ -87,26 +109,12 @@ pub fn handle(app: &mut App, key: KeyEvent) -> bool {
             }
         }
         KeyCode::Char('R') => app.reset = Some(ResetPrompt { scope: 0 }),
-        KeyCode::Char('j') | KeyCode::Down => {
-            if app.page == PAGE_PREVIEW {
-                app.scroll = app.scroll.saturating_add(1);
-            } else {
-                move_cursor(app, 1);
-            }
-        }
-        KeyCode::Char('k') | KeyCode::Up => {
-            if app.page == PAGE_PREVIEW {
-                app.scroll = app.scroll.saturating_sub(1);
-            } else {
-                move_cursor(app, -1);
-            }
-        }
+        KeyCode::Char('j') | KeyCode::Down => move_cursor(app, 1),
+        KeyCode::Char('k') | KeyCode::Up => move_cursor(app, -1),
         KeyCode::Char('J') if app.page == PAGE_MODULES => move_module(app, 1),
         KeyCode::Char('K') if app.page == PAGE_MODULES => move_module(app, -1),
         KeyCode::PageDown => app.scroll = app.scroll.saturating_add(10),
         KeyCode::PageUp => app.scroll = app.scroll.saturating_sub(10),
-        KeyCode::Char('g') if app.page == PAGE_PREVIEW => app.scroll = 0,
-        KeyCode::Char('G') if app.page == PAGE_PREVIEW => app.scroll = 999,
         KeyCode::Char('+') | KeyCode::Char('=') => adjust_value(app, 1),
         KeyCode::Char('-') => adjust_value(app, -1),
         KeyCode::Enter => activate(app),
@@ -122,6 +130,9 @@ pub fn handle(app: &mut App, key: KeyEvent) -> bool {
                     .map(|path| path.display().to_string())
                     .unwrap_or_default(),
             });
+        }
+        KeyCode::Char('e') if app.page == PAGE_DECK && app.cursors[PAGE_DECK] == 15 => {
+            app.edit_note_content();
         }
         KeyCode::Char('e') if app.page == PAGE_GLYPHS && app.cursors[PAGE_GLYPHS] == 5 => {
             app.edit = Some(Edit {
@@ -380,6 +391,8 @@ fn adjust_value(app: &mut App, delta: i64) {
                     app.cfg.logo_gap =
                         Some(adjust(app.cfg.logo_gap.unwrap_or(3) as i64, delta, 0, 20));
                 }
+                14 => app.cycle_note_mode(delta),
+                15 => app.cycle_note_content(delta),
                 _ => {}
             }
         }
@@ -481,7 +494,8 @@ fn activate(app: &mut App) {
                 })
             }
             7 => app.open_picker(PickerKind::Font),
-            14 => app.open_picker(PickerKind::Quote),
+            14 => app.open_picker(PickerKind::NoteMode),
+            15 => app.open_note_content(),
             _ => adjust_value(app, 1),
         },
         PAGE_GLYPHS => {
@@ -538,6 +552,7 @@ fn activate(app: &mut App) {
 fn space(app: &mut App) {
     match app.page {
         PAGE_MODULES => toggle_module(app),
+        PAGE_DECK if app.cursors[PAGE_DECK] == 14 => app.cycle_note_mode(1),
         PAGE_GLYPHS => app.toggle_glyph_mode(app.cursors[PAGE_GLYPHS]),
         PAGE_PALETTE if app.cursors[PAGE_PALETTE] == 3 => app.open_picker(PickerKind::ThemeSet),
         _ => {}
@@ -709,15 +724,31 @@ fn select_picker(app: &mut App, picker: &mut super::Picker) -> bool {
                     app.dirty = true;
                     app.reload_artwork();
                 }
+                PickerKind::NoteMode => {
+                    app.cfg.note_mode = Some(item.value.clone());
+                    app.refresh_note();
+                    app.dirty = true;
+                    app.status = format!("note mode {}", item.value);
+                }
+                PickerKind::Emoticon => {
+                    if item.value == "@custom" {
+                        app.edit = Some(Edit {
+                            target: EditTarget::Emoticon,
+                            text: app.cfg.emoticon.clone().unwrap_or_default(),
+                        });
+                        return true;
+                    }
+                    app.cfg.note_mode = Some("emoticon".to_string());
+                    app.cfg.emoticon = Some(item.value.clone());
+                    app.refresh_note();
+                    app.dirty = true;
+                    app.status = "emoticon updated".to_string();
+                }
                 PickerKind::Quote => {
                     match item.value.as_str() {
                         "@random" => {
                             app.cfg.quote = None;
                             app.status = "quote random".to_string();
-                        }
-                        "@off" => {
-                            app.cfg.quote = Some("off".to_string());
-                            app.status = "quote off".to_string();
                         }
                         "@custom" => {
                             app.edit = Some(Edit {
@@ -729,7 +760,7 @@ fn select_picker(app: &mut App, picker: &mut super::Picker) -> bool {
                                     .filter(|q| q != "off")
                                     .unwrap_or_default(),
                             });
-                            app.refresh_quote();
+                            app.refresh_note();
                             return true;
                         }
                         quote => {
@@ -737,7 +768,7 @@ fn select_picker(app: &mut App, picker: &mut super::Picker) -> bool {
                             app.status = "quote pinned".to_string();
                         }
                     }
-                    app.refresh_quote();
+                    app.refresh_note();
                     app.dirty = true;
                 }
                 PickerKind::GlyphFont => {
@@ -879,14 +910,29 @@ fn edit_key(app: &mut App, key: KeyEvent) {
             let text = edit.text.trim().to_string();
             match edit.target {
                 EditTarget::Quote => {
+                    app.cfg.note_mode = Some("quote".to_string());
                     app.cfg.quote = if text.is_empty() || text == "random" {
                         None
                     } else {
                         Some(text)
                     };
-                    app.refresh_quote();
+                    app.refresh_note();
                     app.dirty = true;
                     app.status = "quote updated".to_string();
+                }
+                EditTarget::NoteText => {
+                    app.cfg.note_mode = Some("text".to_string());
+                    app.cfg.note_text = if text.is_empty() { None } else { Some(text) };
+                    app.refresh_note();
+                    app.dirty = true;
+                    app.status = "note text updated".to_string();
+                }
+                EditTarget::Emoticon => {
+                    app.cfg.note_mode = Some("emoticon".to_string());
+                    app.cfg.emoticon = if text.is_empty() { None } else { Some(text) };
+                    app.refresh_note();
+                    app.dirty = true;
+                    app.status = "emoticon updated".to_string();
                 }
                 EditTarget::LogoText => {
                     app.cfg.logo_text = if text.is_empty() { None } else { Some(text) };

@@ -719,16 +719,73 @@ fn load_quotes(path: &Path) -> Vec<String> {
     quotes
 }
 
-pub fn resolve_quote(config: &Config, quotes: &[String], rng: &mut u64) -> String {
-    match config.quote.as_deref() {
-        Some("off") | Some("none") => String::new(),
-        Some(value) => value.to_string(),
-        None => {
-            if quotes.is_empty() {
-                String::new()
-            } else {
-                quotes[(next_rand(rng) % quotes.len() as u64) as usize].clone()
-            }
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Note {
+    pub text: String,
+    pub author: Option<String>,
+}
+
+pub const EMOTICONS: [&str; 8] = [
+    "(⌐■_■)",
+    "( •_•)>⌐■-■",
+    "ᕕ( ᐛ )ᕗ",
+    "¯\\_(ツ)_/¯",
+    "(￣▽￣)",
+    "ヽ(•‿•)ノ",
+    "ಠ_ಠ",
+    "(￢_￢)",
+];
+
+fn split_note(line: &str) -> Note {
+    if let Some((text, author)) = line.rsplit_once(" — ") {
+        if !author.trim().is_empty() {
+            return Note {
+                text: text.to_string(),
+                author: Some(author.trim().to_string()),
+            };
+        }
+    }
+    Note {
+        text: line.to_string(),
+        author: None,
+    }
+}
+
+pub fn resolve_note(config: &Config, quotes: &[String], rng: &mut u64) -> Note {
+    match config.note_mode() {
+        "off" => Note::default(),
+        "text" => Note {
+            text: config
+                .note_text
+                .clone()
+                .or_else(|| {
+                    config
+                        .quote
+                        .clone()
+                        .filter(|quote| quote != "off" && quote != "random")
+                })
+                .unwrap_or_default(),
+            author: None,
+        },
+        "emoticon" => Note {
+            text: config
+                .emoticon
+                .clone()
+                .unwrap_or_else(|| EMOTICONS[0].to_string()),
+            author: None,
+        },
+        _ => {
+            let line = match config.quote.as_deref() {
+                Some("off") | Some("none") => return Note::default(),
+                Some("random") | None => {
+                    if quotes.is_empty() {
+                        return Note::default();
+                    }
+                    quotes[(next_rand(rng) % quotes.len() as u64) as usize].clone()
+                }
+                Some(value) => value.to_string(),
+            };
+            split_note(&line)
         }
     }
 }
@@ -1857,7 +1914,7 @@ fn build_sections(data: &FetchData, pal: &Palette, config: &Config) -> Sections 
 fn render(
     theme: &Theme,
     data: &FetchData,
-    quote: &str,
+    note: &Note,
     width: usize,
     seed: u64,
     title_variant: bool,
@@ -1970,17 +2027,21 @@ fn render(
         }
     }
 
-    if !quote.is_empty() {
+    if !note.text.is_empty() {
         lines.push(Line::new());
-        let mut note = Line::new();
-        note.push("NOTE", Some(pal.accent2), true);
-        note.push("  ", None, false);
-        note.push(
-            &truncate(quote, width.saturating_sub(6)),
-            Some(pal.dim),
-            false,
-        );
-        lines.push(note);
+        let mut quote = Line::new();
+        quote.push(&truncate(&note.text, width), Some(pal.dim), false);
+        lines.push(quote);
+        if let Some(author) = &note.author {
+            let mut line = Line::new();
+            line.push("  -", Some(pal.accent2), false);
+            line.push(
+                &truncate(author, width.saturating_sub(3)),
+                Some(pal.accent2),
+                false,
+            );
+            lines.push(line);
+        }
     }
 
     lines
@@ -2298,7 +2359,7 @@ fn main() {
     });
 
     let quotes = load_quotes(&quotes_path(&opts));
-    let quote = resolve_quote(&config, &quotes, &mut rng);
+    let note = resolve_note(&config, &quotes, &mut rng);
     let glyph_seed = next_rand(&mut rng);
     let title_variant = next_rand(&mut rng).is_multiple_of(2);
 
@@ -2369,7 +2430,7 @@ fn main() {
     let mut lines = render(
         &theme,
         &data,
-        &quote,
+        &note,
         width,
         glyph_seed,
         title_variant,
@@ -2620,14 +2681,23 @@ mod tests {
         let mut rng = 7u64;
         let quotes = vec!["one".to_string(), "two".to_string()];
         let mut config = Config::default();
-        assert!(!resolve_quote(&config, &quotes, &mut rng).is_empty());
+        assert!(!resolve_note(&config, &quotes, &mut rng).text.is_empty());
         config.quote = Some("off".to_string());
-        assert!(resolve_quote(&config, &quotes, &mut rng).is_empty());
-        config.quote = Some("pinned — Someone".to_string());
-        assert_eq!(
-            resolve_quote(&config, &quotes, &mut rng),
-            "pinned — Someone".to_string()
-        );
+        assert!(resolve_note(&config, &quotes, &mut rng).text.is_empty());
+        config.quote = Some("“Pinned.” — Someone".to_string());
+        let note = resolve_note(&config, &quotes, &mut rng);
+        assert_eq!(note.text, "“Pinned.”");
+        assert_eq!(note.author.as_deref(), Some("Someone"));
+        config.note_mode = Some("text".to_string());
+        config.note_text = Some("plain line".to_string());
+        assert_eq!(resolve_note(&config, &quotes, &mut rng).text, "plain line");
+        config.note_mode = Some("emoticon".to_string());
+        config.emoticon = Some("(o_o)".to_string());
+        let note = resolve_note(&config, &quotes, &mut rng);
+        assert_eq!(note.text, "(o_o)");
+        assert!(note.author.is_none());
+        config.note_mode = Some("off".to_string());
+        assert!(resolve_note(&config, &quotes, &mut rng).text.is_empty());
     }
 
     #[test]

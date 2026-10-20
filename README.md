@@ -43,7 +43,7 @@ It is designed for people who want the truth about their systems at a glance —
 | **One process** | every value is collected in-process; no forks, no pipelines |
 | **HUD layout** | two-column flight-deck composition with a `stack` fallback for narrow terms |
 | **Reveal motion** | a short staged entrance, or silence with `--static` |
-| **Configurator** | `--tui` pages for modules, deck, glyphs, palette, thresholds, artwork and more, with a live preview |
+| **Configurator** | `--tui` pages for modules, deck, glyphs, palette, thresholds and artwork, plus a `P` full-screen preview of the real frame |
 | **Palette engine** | six built-in themes (Solitude, Vantablack, Hackerman, Retro 82, Rose Pine, Flexoki Light) plus a TSV table and the active theme state |
 | **Text logo** | any system font rendered as braille art with a two-tone tint — no image protocol needed |
 | **Image logo** | kitty graphics protocol with placement that never reflows text |
@@ -116,7 +116,8 @@ Battery health  96%
 CPU temp        58 °C
 GPU temp        52 °C
 
-NOTE  “We must know. We will know.” — David Hilbert
+“We must know. We will know.”
+  -David Hilbert
 ```
 
 <br>
@@ -154,13 +155,14 @@ NOTE  “We must know. We will know.” — David Hilbert
 tachyon --tui
 ```
 
-Eight pages, one engine: **Modules · Deck · Glyphs · Palette · Thresholds · Artwork · Preview · Keys**.
+Seven pages, one engine: **Modules · Deck · Glyphs · Palette · Thresholds · Artwork · Keys**. `P` hides the interface and shows the frame full-screen exactly as the fetch prints it; `P` or `esc` returns.
 
 ```text
 h l / ← →      previous · next page space   toggle · pin/random · mark
-j k / ↑ ↓      move · scroll        enter   glyph library · open picker · apply
+j k / ↑ ↓      move · preview scroll enter   glyph library · open picker · apply
 + -            adjust · cycle glyph J K     reorder the enabled modules
 shift+enter    pick a module up, move with j/k, drop (m works everywhere)
+P              full-screen preview   esc     back to editing
 e / g / G      type a glyph value · glyph library · pool from a font
 R              reset (setting · page · config)
 a              add photo            p       pin glyph · copy palette
@@ -168,7 +170,7 @@ s              save                 r       randomize glyphs · refresh
 q / ctrl-c     quit
 ```
 
-The configurator is the whole config surface, not a subset. **Deck** edits composition, units, temperature, the quote setting, the logo mode, the logo text, and a font picker that lists every family fontconfig knows and renders the result live. **Glyphs** maps every fetched object individually with pinned, random and auto modes; `enter` on a glyph opens the Nerd Font glyph library directly (names and code points included; type a name or `nf-` alias to filter); `ctrl-f` switches the source font, so any installed font can supply the pinned glyph or a random pool. Per-section glyphs and a hand-editable pool sit alongside. **Palette** picks from the built-in themes or any installed palette table, edits RGB channels, and defines the rotation set; switching to light mode hides every theme without a real light variant and prunes it from the rotation set. **Artwork** is album-first: choose an album, then choose a frame to pin or rotate through the whole album; rotation mode and cadence are editable in place. **Preview** renders the real readout, including the actual text logo, composed exactly as the fetch will print it. `R` resets the current setting, the whole page, or the entire config after confirmation. Comments and unknown keys in `fetch.conf` survive every save. Every change lands in `fetch.conf` on `s` — the same plain-text file the renderer consumes.
+The configurator is the whole config surface, not a subset. **Deck** edits composition, units, temperature, the note (a quote with its author under it, a plain line, an emoticon, or off), the logo mode, the logo text, and a font picker that lists every family fontconfig knows and renders the result live. **Glyphs** maps every fetched object individually with pinned, random and auto modes; `enter` on a glyph opens the Nerd Font glyph library directly (names and code points included; type a name or `nf-` alias to filter); `ctrl-f` switches the source font, so any installed font can supply the pinned glyph or a random pool. Per-section glyphs and a hand-editable pool sit alongside. **Palette** picks from the built-in themes or any installed palette table, edits RGB channels, and defines the rotation set; switching to light mode hides every theme without a real light variant and prunes it from the rotation set. **Artwork** is album-first: choose an album, then choose a frame to pin or rotate through the whole album; rotation mode and cadence are editable in place. `P` renders the real readout, including the actual text logo and artwork, composed exactly as the fetch will print it, with no tabs or panels in the way. `R` resets the current setting, the whole page, or the entire config after confirmation. Comments and unknown keys in `fetch.conf` survive every save. Every change lands in `fetch.conf` on `s` — the same plain-text file the renderer consumes.
 
 Pickers are filter-first: type to narrow, `↑`/`↓` to move, `enter` to take, `esc` to cancel. In the theme-set picker, `space` marks a theme and advances.
 
@@ -184,7 +186,11 @@ Built on [ratatui](https://ratatui.rs); nothing runs between frames.
 # only these modules render; omit the line for all of them
 enabled = os,host,kernel,uptime,session,cpu,memory,swap,disk_root,disk_media,gpu_util,gpu_vram,battery,cpu_temp,gpu_temp
 
-quote  = random       # random · off · a pinned line (full text)
+# note under the readout: quote, text, emoticon, or off
+note_mode = quote
+quote     = random    # random pool line, or a pinned full line
+note_text =           # used when note_mode = text
+emoticon  = (⌐■_■)   # used when note_mode = emoticon
 glyph  = ◆            # header glyph; random, or one character
 layout = hud
 motion = reveal
@@ -278,7 +284,7 @@ The six built-in themes are always available; a palette table (for example, one 
 - **Direct collection.** `/proc` and `/sys` are parsed in place. DMI and hwmon are discovered, not assumed.
 - **NVML on demand.** The library is opened with `dlopen`; if the driver or the symbol is absent, GPU telemetry silently degrades.
 - **One write.** The frame is composed in memory and emitted once, so a slow terminal never tears the layout.
-- **One engine.** The configurator preview renders through the same layout code as the CLI.
+- **One engine.** The `P` preview and the configurator render through the same layout code as the CLI.
 - **Text logos locally.** Fonts are rasterized in-process with `fontdue`; fontconfig is only consulted when you open the picker or resolve a family.
 - **Contained unsafe.** `unsafe` is limited to the NVML ABI, termios and the terminal bindings.
 - **Nothing persistent except intent.** Renders do not write state; only an explicit configurator save does.

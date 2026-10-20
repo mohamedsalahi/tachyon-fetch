@@ -20,14 +20,13 @@ pub mod input;
 pub mod util;
 pub mod view;
 
-pub const PAGE_TITLES: [&str; 8] = [
+pub const PAGE_TITLES: [&str; 7] = [
     "Modules",
     "Deck",
     "Glyphs",
     "Palette",
     "Thresholds",
     "Artwork",
-    "Preview",
     "Keys",
 ];
 
@@ -37,10 +36,9 @@ pub const PAGE_GLYPHS: usize = 2;
 pub const PAGE_PALETTE: usize = 3;
 pub const PAGE_THRESHOLDS: usize = 4;
 pub const PAGE_ARTWORK: usize = 5;
-pub const PAGE_PREVIEW: usize = 6;
-pub const PAGE_KEYS: usize = 7;
+pub const PAGE_KEYS: usize = 6;
 
-pub const DECK_ROWS: usize = 15;
+pub const DECK_ROWS: usize = 16;
 pub const GLYPH_FIXED_ROWS: usize = 6;
 pub const PALETTE_ROWS: usize = 13;
 pub const ARTWORK_ROWS: usize = 4;
@@ -63,6 +61,8 @@ pub enum EditTarget {
     LogoText,
     Pool,
     Quote,
+    NoteText,
+    Emoticon,
 }
 
 pub struct Edit {
@@ -81,6 +81,8 @@ pub enum PickerKind {
     GlyphFont,
     Glyph(usize),
     GlyphPool,
+    NoteMode,
+    Emoticon,
 }
 
 #[derive(Clone)]
@@ -132,9 +134,9 @@ pub struct App<'a> {
     pub theme: Theme,
     pub palettes: Vec<(String, String, Palette, String, String)>,
     pub page: usize,
-    pub cursors: [usize; 8],
+    pub cursors: [usize; 7],
     pub data: FetchData,
-    pub quote: String,
+    pub note: crate::Note,
     pub quotes: Vec<String>,
     pub demo: bool,
     pub status: String,
@@ -152,8 +154,10 @@ pub struct App<'a> {
     pub glyph_seed: u64,
     pub glyph_source: Option<Vec<crate::font::FontGlyph>>,
     pub glyph_font: Option<String>,
+    pub quote_index: usize,
     pub glyph_target: Option<usize>,
     pub picked: Option<(String, usize)>,
+    pub preview: bool,
     placed: Option<(PathBuf, u16, u16, u16, u16)>,
     rng: u64,
 }
@@ -185,9 +189,9 @@ impl<'a> App<'a> {
             theme,
             palettes,
             page: 0,
-            cursors: [0; 8],
+            cursors: [0; 7],
             data,
-            quote: String::new(),
+            note: crate::Note::default(),
             quotes,
             demo,
             status: format!("config {}", crate::config_path(opts).display()),
@@ -205,19 +209,107 @@ impl<'a> App<'a> {
             glyph_seed: seed,
             glyph_source: None,
             glyph_font: None,
+            quote_index: 0,
             glyph_target: None,
             picked: None,
+            preview: false,
             placed: None,
             rng: seed,
         };
-        app.refresh_quote();
+        app.refresh_note();
         app.refresh();
         app.prune_rotation_set();
         app
     }
 
-    pub fn refresh_quote(&mut self) {
-        self.quote = crate::resolve_quote(&self.cfg, &self.quotes, &mut self.rng);
+    pub fn refresh_note(&mut self) {
+        self.note = crate::resolve_note(&self.cfg, &self.quotes, &mut self.rng);
+    }
+
+    pub fn cycle_note_mode(&mut self, delta: i64) {
+        let modes = ["quote", "text", "emoticon", "off"];
+        let current = self.cfg.note_mode().to_string();
+        let index = modes.iter().position(|mode| *mode == current).unwrap_or(0);
+        let index = util::wrap_index(index, modes.len(), delta);
+        self.cfg.note_mode = Some(modes[index].to_string());
+        self.refresh_note();
+        self.dirty = true;
+        self.status = format!("note mode {}", modes[index]);
+    }
+
+    pub fn cycle_note_content(&mut self, delta: i64) {
+        match self.cfg.note_mode() {
+            "quote" => {
+                if !self.quotes.is_empty() {
+                    self.quote_index = util::wrap_index(self.quote_index, self.quotes.len(), delta);
+                    self.cfg.quote = Some(self.quotes[self.quote_index].clone());
+                    self.status =
+                        format!("quote {} of {}", self.quote_index + 1, self.quotes.len());
+                }
+            }
+            "emoticon" => {
+                let faces = crate::EMOTICONS;
+                let current = self
+                    .cfg
+                    .emoticon
+                    .clone()
+                    .unwrap_or_else(|| faces[0].to_string());
+                let index = faces.iter().position(|face| *face == current).unwrap_or(0);
+                let index = util::wrap_index(index, faces.len(), delta);
+                self.cfg.emoticon = Some(faces[index].to_string());
+                self.status = format!("emoticon {}", faces[index]);
+            }
+            _ => return,
+        }
+        self.refresh_note();
+        self.dirty = true;
+    }
+
+    pub fn open_note_content(&mut self) {
+        match self.cfg.note_mode() {
+            "quote" => self.open_picker(PickerKind::Quote),
+            "text" => {
+                self.edit = Some(Edit {
+                    target: EditTarget::NoteText,
+                    text: self.cfg.note_text.clone().unwrap_or_default(),
+                })
+            }
+            "emoticon" => self.open_picker(PickerKind::Emoticon),
+            _ => self.status = "note is off".to_string(),
+        }
+    }
+
+    pub fn edit_note_content(&mut self) {
+        match self.cfg.note_mode() {
+            "quote" => {
+                self.edit = Some(Edit {
+                    target: EditTarget::Quote,
+                    text: self
+                        .cfg
+                        .quote
+                        .clone()
+                        .filter(|quote| quote != "off")
+                        .unwrap_or_default(),
+                })
+            }
+            "text" => {
+                self.edit = Some(Edit {
+                    target: EditTarget::NoteText,
+                    text: self.cfg.note_text.clone().unwrap_or_default(),
+                })
+            }
+            "emoticon" => {
+                self.edit = Some(Edit {
+                    target: EditTarget::Emoticon,
+                    text: self
+                        .cfg
+                        .emoticon
+                        .clone()
+                        .unwrap_or_else(|| crate::EMOTICONS[0].to_string()),
+                })
+            }
+            _ => {}
+        }
     }
 
     pub fn refresh(&mut self) {
@@ -697,16 +789,43 @@ impl<'a> App<'a> {
                     items,
                 )
             }
+            PickerKind::NoteMode => (
+                "note mode".to_string(),
+                [
+                    ("quote", "quote — pool line, author under"),
+                    ("text", "text — your own line"),
+                    ("emoticon", "emoticon — text face"),
+                    ("off", "off — nothing"),
+                ]
+                .into_iter()
+                .map(|(value, label)| PickerItem {
+                    label: label.to_string(),
+                    value: value.to_string(),
+                    checked: false,
+                })
+                .collect(),
+            ),
+            PickerKind::Emoticon => {
+                let mut items: Vec<PickerItem> = crate::EMOTICONS
+                    .iter()
+                    .map(|face| PickerItem {
+                        label: face.to_string(),
+                        value: face.to_string(),
+                        checked: false,
+                    })
+                    .collect();
+                items.push(PickerItem {
+                    label: "— custom —".to_string(),
+                    value: "@custom".to_string(),
+                    checked: false,
+                });
+                ("emoticons · enter picks".to_string(), items)
+            }
             PickerKind::Quote => {
                 let mut items = vec![
                     PickerItem {
                         label: "↻ random".to_string(),
                         value: "@random".to_string(),
-                        checked: false,
-                    },
-                    PickerItem {
-                        label: "off".to_string(),
-                        value: "@off".to_string(),
                         checked: false,
                     },
                     PickerItem {
@@ -792,8 +911,16 @@ impl<'a> App<'a> {
                     11 => self.cfg.logo_min = None,
                     12 => self.cfg.logo_max = None,
                     13 => self.cfg.logo_gap = None,
-                    _ => self.cfg.quote = None,
+                    14 => self.cfg.note_mode = None,
+                    15 => match self.cfg.note_mode() {
+                        "quote" => self.cfg.quote = None,
+                        "text" => self.cfg.note_text = None,
+                        "emoticon" => self.cfg.emoticon = None,
+                        _ => {}
+                    },
+                    _ => {}
                 }
+                self.refresh_note();
                 self.refresh();
                 self.dirty = true;
                 self.status = "setting reset".to_string();
@@ -883,7 +1010,10 @@ impl<'a> App<'a> {
                 self.cfg.logo_max = None;
                 self.cfg.logo_gap = None;
                 self.cfg.quote = None;
-                self.refresh_quote();
+                self.cfg.note_mode = None;
+                self.cfg.note_text = None;
+                self.cfg.emoticon = None;
+                self.refresh_note();
                 self.refresh();
             }
             PAGE_GLYPHS => {
@@ -933,6 +1063,7 @@ impl<'a> App<'a> {
     pub fn reset_all(&mut self) {
         self.cfg = Config::default();
         self.rebuild_theme();
+        self.refresh_note();
         self.refresh();
         self.dirty = true;
         self.status = "config reset to defaults".to_string();
@@ -1106,19 +1237,20 @@ mod tests {
     }
 
     #[test]
-    fn artwork_pane_is_scoped_to_the_preview_page() {
+    fn artwork_pane_is_scoped_to_the_preview_toggle() {
         let opts = demo_opts();
         let mut app = App::new(&opts, &Config::default());
+        app.artwork = Some(fake_png("preview-toggle.png"));
         let mut terminal =
             ratatui::Terminal::new(ratatui::backend::TestBackend::new(150, 40)).expect("terminal");
-        app.page = PAGE_PREVIEW;
+        app.preview = true;
         terminal
             .draw(|frame| view::draw(frame, &mut app))
             .expect("draw");
-        let pane = app.artwork_pane.expect("pane on preview");
+        let pane = app.artwork_pane.expect("pane in preview");
         assert!(pane.width >= 8 && pane.height >= 3);
         assert!(pane.right() <= 150 && pane.bottom() <= 40);
-        app.page = PAGE_MODULES;
+        app.preview = false;
         terminal
             .draw(|frame| view::draw(frame, &mut app))
             .expect("draw");
@@ -1241,6 +1373,126 @@ mod tests {
         assert_eq!(order[0].0, "memory");
         assert_eq!(order[1].0, "os");
         assert_eq!(order.len(), crate::MODULES.len());
+    }
+
+    #[test]
+    fn preview_toggle_shows_only_the_frame_and_returns() {
+        use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        let opts = demo_opts();
+        let mut app = App::new(&opts, &Config::default());
+        app.note = crate::Note {
+            text: "“We must know. We will know.”".to_string(),
+            author: Some("David Hilbert".to_string()),
+        };
+        let mut terminal =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(150, 40)).expect("terminal");
+        app.preview = true;
+        terminal
+            .draw(|frame| view::draw(frame, &mut app))
+            .expect("draw");
+        let buffer = terminal.backend().buffer();
+        let mut text = String::new();
+        for y in 0..buffer.area.height {
+            for x in 0..buffer.area.width {
+                text.push_str(buffer.cell((x, y)).map(|cell| cell.symbol()).unwrap_or(" "));
+            }
+            text.push('\n');
+        }
+        assert!(text.contains("TACHYON"));
+        assert!(text.contains("-David Hilbert"));
+        assert!(!text.contains("Modules"), "tabs must be hidden:\n{}", text);
+        assert!(!text.contains("preview  q"), "footer must be hidden");
+        input::handle(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('P'), KeyModifiers::SHIFT),
+        );
+        assert!(!app.preview);
+        input::handle(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('P'), KeyModifiers::SHIFT),
+        );
+        assert!(app.preview);
+        input::handle(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert!(!app.preview);
+    }
+
+    #[test]
+    fn deck_exposes_the_note_mode_and_content_rows() {
+        let opts = demo_opts();
+        let mut app = App::new(&opts, &Config::default());
+        app.page = PAGE_DECK;
+        let mut terminal =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(140, 44)).expect("terminal");
+        terminal
+            .draw(|frame| view::draw(frame, &mut app))
+            .expect("draw");
+        let buffer = terminal.backend().buffer();
+        let mut text = String::new();
+        for y in 0..buffer.area.height {
+            for x in 0..buffer.area.width {
+                text.push_str(buffer.cell((x, y)).map(|cell| cell.symbol()).unwrap_or(" "));
+            }
+            text.push('\n');
+        }
+        assert!(
+            text.contains("note mode"),
+            "deck rows must include the mode:\n{}",
+            text
+        );
+        assert!(text.contains("quote"), "note mode value missing");
+        assert_eq!(app.cursors[PAGE_DECK], 0);
+    }
+
+    #[test]
+    fn note_modes_cycle_and_edit() {
+        let opts = demo_opts();
+        let mut app = App::new(&opts, &Config::default());
+        assert_eq!(app.cfg.note_mode(), "quote");
+        app.cycle_note_mode(1);
+        assert_eq!(app.cfg.note_mode(), "text");
+        app.cfg.note_text = Some("custom line".to_string());
+        app.refresh_note();
+        assert_eq!(app.note.text, "custom line");
+        app.cycle_note_mode(1);
+        assert_eq!(app.cfg.note_mode(), "emoticon");
+        assert!(crate::EMOTICONS.contains(&app.note.text.as_str()));
+        app.cycle_note_mode(1);
+        assert_eq!(app.cfg.note_mode(), "off");
+        assert!(app.note.text.is_empty());
+        app.cfg.note_mode = Some("quote".to_string());
+        app.cfg.quote = Some("“Pinned.” — Someone".to_string());
+        app.refresh_note();
+        assert_eq!(app.note.author.as_deref(), Some("Someone"));
+    }
+
+    #[test]
+    fn note_mode_picker_then_note_edit_keeps_the_typed_line() {
+        use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        let opts = demo_opts();
+        let mut app = App::new(&opts, &Config::default());
+        app.page = PAGE_DECK;
+        app.cursors[PAGE_DECK] = 14;
+        input::handle(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        input::handle(&mut app, KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        input::handle(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(app.cfg.note_mode(), "text");
+        assert!(app.picker.is_none());
+        input::handle(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE),
+        );
+        assert_eq!(app.cursors[PAGE_DECK], 15);
+        input::handle(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+        assert!(app.edit.is_some());
+        for ch in "Hello cockpit.".chars() {
+            input::handle(
+                &mut app,
+                KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE),
+            );
+        }
+        input::handle(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(app.cfg.note_text.as_deref(), Some("Hello cockpit."));
     }
 
     #[test]

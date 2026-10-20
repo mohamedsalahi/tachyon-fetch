@@ -2,20 +2,23 @@ use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line as RLine, Span as RSpan, Text};
 use ratatui::widgets::{
-    Block, BorderType, Cell, Clear, List, ListItem, ListState, Paragraph, Row, Sparkline, Table,
+    Block, BorderType, Cell, Clear, List, ListItem, ListState, Paragraph, Row, Table,
 };
 use ratatui::Frame;
 
 use super::util;
 use super::{
     App, EditTarget, PickerKind, COLOR_NAMES, DECK_ROWS, GLYPH_FIXED_ROWS, PAGE_ARTWORK, PAGE_DECK,
-    PAGE_GLYPHS, PAGE_KEYS, PAGE_MODULES, PAGE_PALETTE, PAGE_PREVIEW, PAGE_THRESHOLDS, PAGE_TITLES,
-    PALETTE_ROWS,
+    PAGE_GLYPHS, PAGE_KEYS, PAGE_MODULES, PAGE_PALETTE, PAGE_THRESHOLDS, PAGE_TITLES, PALETTE_ROWS,
 };
 
 pub fn draw(frame: &mut Frame, app: &mut App) {
     let area = frame.area();
     app.artwork_pane = None;
+    if app.preview {
+        full_preview(frame, area, app);
+        return;
+    }
     let pal = app.theme.pal;
     let chunks = Layout::vertical([
         Constraint::Length(2),
@@ -48,7 +51,6 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         PAGE_PALETTE => palette(frame, chunks[1], app),
         PAGE_THRESHOLDS => thresholds(frame, chunks[1], app),
         PAGE_ARTWORK => artwork(frame, chunks[1], app),
-        PAGE_PREVIEW => preview(frame, chunks[1], app),
         PAGE_KEYS => keys(frame, chunks[1], app),
         _ => {}
     }
@@ -60,7 +62,6 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         PAGE_GLYPHS => "enter glyph library · e value · space pin/random · G pool from font",
         PAGE_PALETTE => "enter pick · space marks the rotation set · p copy · x clear",
         PAGE_ARTWORK => "enter browse · a add photo · -/+ rotate · x clear",
-        PAGE_PREVIEW => "j/k scroll · g top · G bottom",
         _ => "h/l page · R reset",
     };
     let status = RLine::from(vec![
@@ -72,6 +73,8 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         RSpan::styled("page  ", util::fg(pal.dim)),
         RSpan::styled(" R ", util::fg(pal.warn).add_modifier(Modifier::BOLD)),
         RSpan::styled("reset  ", util::fg(pal.dim)),
+        RSpan::styled(" P ", util::fg(pal.accent).add_modifier(Modifier::BOLD)),
+        RSpan::styled("preview  ", util::fg(pal.dim)),
         RSpan::styled(" q ", util::fg(pal.err).add_modifier(Modifier::BOLD)),
         RSpan::styled("quit   ", util::fg(pal.dim)),
         RSpan::styled(format!("{} {}", hints, dirty), util::fg(pal.dim)),
@@ -231,7 +234,8 @@ fn deck(frame: &mut Frame, area: Rect, app: &App) {
         row("min cols", &app.cfg.logo_min.unwrap_or(26).to_string(), app),
         row("max cols", &app.cfg.logo_max.unwrap_or(46).to_string(), app),
         row("gap", &app.cfg.logo_gap.unwrap_or(3).to_string(), app),
-        row("quote", &quote_value(app), app),
+        row("note mode", app.cfg.note_mode(), app),
+        row("note", &note_value(app), app),
     ];
     let table = Table::new(rows, [Constraint::Length(16), Constraint::Min(20)])
         .block(panel(&format!("deck · {} · {}", logo_mode, font), app))
@@ -240,17 +244,22 @@ fn deck(frame: &mut Frame, area: Rect, app: &App) {
     let _ = (DECK_ROWS, pal);
 }
 
-fn quote_value(app: &App) -> String {
-    match app.cfg.quote.as_deref() {
-        None => "random".to_string(),
-        Some("off") | Some("none") => "off".to_string(),
-        Some(text) => {
-            let mut short: String = text.chars().take(64).collect();
-            if text.chars().count() > 64 {
-                short.push('…');
-            }
-            short
-        }
+fn note_value(app: &App) -> String {
+    if app.cfg.note_mode() == "off" {
+        return "off".to_string();
+    }
+    let text = app.note.text.clone();
+    let mut short: String = text.chars().take(64).collect();
+    if text.chars().count() > 64 {
+        short.push('…');
+    }
+    if let Some(author) = &app.note.author {
+        short.push_str(&format!("  — {author}"));
+    }
+    if short.is_empty() {
+        "(empty)".to_string()
+    } else {
+        short
     }
 }
 
@@ -485,20 +494,25 @@ fn artwork(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(Paragraph::new(note).block(panel("album", app)), chunks[1]);
 }
 
-fn preview(frame: &mut Frame, area: Rect, app: &mut App) {
+fn full_preview(frame: &mut Frame, area: Rect, app: &mut App) {
     let pal = app.theme.pal;
-    let chunks = Layout::vertical([Constraint::Min(6), Constraint::Length(3)]).split(area);
+    frame.render_widget(Block::default().style(util::bg(pal.bg)), area);
+    let logo_mode = if app.theme.layout == "stack" {
+        ""
+    } else {
+        app.cfg.logo_mode()
+    };
+    let cap = app.logo_cap(area.width as usize);
+    let gap = app.cfg.logo_gap.unwrap_or(3) as usize;
 
-    if app.cfg.logo_mode() == "text" {
-        let cap = app.logo_cap(area.width as usize).min(40);
+    if logo_mode == "text" {
         if let Some(logo) = crate::text_logo(&app.cfg, &app.data.hostname, cap, &pal) {
-            let gap = app.cfg.logo_gap.unwrap_or(3) as usize;
-            if area.width as usize >= logo.width + gap + 44 {
-                let width = area.width as usize - logo.width - gap - 2;
+            if area.width as usize >= logo.width + gap + 56 {
+                let width = area.width as usize - logo.width - gap - 1;
                 let lines = crate::render(
                     &app.theme,
                     &app.data,
-                    &app.quote,
+                    &app.note,
                     width.max(30),
                     app.glyph_seed,
                     true,
@@ -506,111 +520,57 @@ fn preview(frame: &mut Frame, area: Rect, app: &mut App) {
                     &app.cfg,
                 );
                 let lines = crate::compose_logo(&logo, lines, gap);
-                draw_readout(frame, chunks[0], app, lines);
-            } else {
-                let text: Vec<RLine> = logo
-                    .lines
-                    .iter()
-                    .map(|line| RLine::from(RSpan::styled(line.text.clone(), util::fg(pal.accent))))
-                    .collect();
-                frame.render_widget(
-                    Paragraph::new(Text::from(text)).block(panel("text logo", app)),
-                    chunks[0],
-                );
-            }
-        } else {
-            frame.render_widget(
-                Paragraph::new(Text::from(vec![RLine::from(RSpan::styled(
-                    "  text logo: font not resolvable — pick a font on Deck",
-                    util::fg(pal.warn),
-                ))]))
-                .block(panel("live readout", app)),
-                chunks[0],
-            );
-        }
-    } else {
-        let body = if chunks[0].width >= 92 {
-            let split =
-                Layout::horizontal([Constraint::Min(50), Constraint::Length(36)]).split(chunks[0]);
-            (split[0], Some(split[1]))
-        } else {
-            (chunks[0], None)
-        };
-        app.artwork_pane = body.1.map(|pane| {
-            pane.inner(ratatui::layout::Margin {
-                vertical: 1,
-                horizontal: 1,
-            })
-        });
-        if let Some(art) = body.1 {
-            let block = panel("artwork", app);
-            if app.artwork.is_some() && crate::in_kitty() {
-                frame.render_widget(block, art);
-            } else {
-                let note = app
-                    .artwork
-                    .as_ref()
-                    .and_then(|path| {
-                        path.file_name()
-                            .map(|name| name.to_string_lossy().to_string())
-                    })
-                    .unwrap_or_else(|| "no artwork selected".to_string());
-                let hint = if crate::in_kitty() {
-                    "kitty image"
-                } else {
-                    "image renders in kitty"
-                };
-                let text = Text::from(vec![
-                    RLine::from(""),
-                    RLine::from(RSpan::styled(format!("  {}", note), util::fg(pal.fg))),
-                    RLine::from(RSpan::styled(format!("  {}", hint), util::fg(pal.dim))),
-                ]);
-                frame.render_widget(Paragraph::new(text).block(block), art);
+                draw_plain(frame, area, app, lines);
+                return;
             }
         }
-        let width = body.0.width.saturating_sub(2) as usize;
-        let lines = crate::render(
-            &app.theme,
-            &app.data,
-            &app.quote,
-            width.max(20),
-            app.glyph_seed,
-            true,
-            app.demo,
-            &app.cfg,
-        );
-        draw_readout(frame, body.0, app, lines);
     }
 
-    let graphs = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(chunks[1]);
-    let memory = Sparkline::default()
-        .data(&app.history_mem)
-        .max(100)
-        .style(util::fg(pal.accent));
-    frame.render_widget(
-        memory.block(Block::default().title(RSpan::styled(" memory %", util::fg(pal.dim)))),
-        graphs[0],
+    let mut indent = 0usize;
+    if logo_mode == "image" && area.width as usize > cap + gap + 56 {
+        if let Some(art) = &app.artwork {
+            if let Some((img_w, img_h)) = crate::png_size(art) {
+                if img_w > 0 {
+                    let (cols, rows, xpixel, ypixel) = crate::term_size();
+                    let cell_ratio = if xpixel > 0 && ypixel > 0 && cols > 0 && rows > 0 {
+                        (xpixel as f64 / cols as f64) / (ypixel as f64 / rows as f64)
+                    } else {
+                        0.5
+                    };
+                    let image_rows = ((cap as f64) * cell_ratio * (img_h as f64 / img_w as f64))
+                        .ceil()
+                        .clamp(3.0, area.height as f64) as u16;
+                    app.artwork_pane = Some(Rect::new(area.x, area.y, cap as u16, image_rows));
+                    if crate::in_kitty() {
+                        indent = cap + gap;
+                    }
+                }
+            }
+        }
+    }
+
+    let width = (area.width as usize).saturating_sub(indent + 1).max(30);
+    let lines = crate::render(
+        &app.theme,
+        &app.data,
+        &app.note,
+        width,
+        app.glyph_seed,
+        true,
+        app.demo,
+        &app.cfg,
     );
-    let swap = Sparkline::default()
-        .data(&app.history_swap)
-        .max(100)
-        .style(util::fg(pal.accent2));
-    frame.render_widget(
-        swap.block(Block::default().title(RSpan::styled(" swap %", util::fg(pal.dim)))),
-        graphs[1],
+    let body = Rect::new(
+        area.x + indent as u16,
+        area.y,
+        area.width.saturating_sub(indent as u16),
+        area.height,
     );
+    draw_plain(frame, body, app, lines);
 }
 
-fn draw_readout(frame: &mut Frame, area: Rect, app: &mut App, lines: Vec<crate::Line>) {
-    let view_height = area.height.saturating_sub(2) as usize;
-    let max_scroll = lines.len().saturating_sub(view_height);
-    if app.scroll > max_scroll {
-        app.scroll = max_scroll;
-    }
-    let paragraph = Paragraph::new(Text::from(util::lines(&lines)))
-        .block(panel("live readout", app))
-        .scroll((app.scroll as u16, 0));
+fn draw_plain(frame: &mut Frame, area: Rect, app: &App, lines: Vec<crate::Line>) {
+    let paragraph = Paragraph::new(Text::from(util::lines(&lines))).scroll((app.scroll as u16, 0));
     frame.render_widget(paragraph, area);
 }
 
@@ -618,8 +578,9 @@ fn keys(frame: &mut Frame, area: Rect, app: &App) {
     let pal = app.theme.pal;
     let rows = [
         ("h l / ← →", "previous · next page"),
-        ("1-8 / tab", "jump · cycle pages"),
+        ("1-7 / tab", "jump · cycle pages"),
         ("j k / ↑ ↓", "move · preview scroll"),
+        ("P", "full-screen preview · P or esc returns"),
         ("+ -", "adjust value or cycle glyph"),
         ("space", "toggle · pin/random · mark a set"),
         ("enter", "glyph library · open picker · apply"),
@@ -737,6 +698,8 @@ fn edit_popup(frame: &mut Frame, area: Rect, app: &App) {
         EditTarget::LogoText => "logo text".to_string(),
         EditTarget::Pool => "glyph pool".to_string(),
         EditTarget::Quote => "quote text".to_string(),
+        EditTarget::NoteText => "note text".to_string(),
+        EditTarget::Emoticon => "emoticon".to_string(),
     };
     let line = RLine::from(vec![
         RSpan::styled(" ", util::fg(pal.fg)),
